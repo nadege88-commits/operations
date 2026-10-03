@@ -289,3 +289,9 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 :root[data-theme="light"] .scrim{background:rgba(17,19,26,.35)}
 .theme-pick{display:flex;gap:6px}
 .meta .due svg{color:inherit}
+
+/* venue logos on the home cards */
+.venue .vlogo{height:38px;width:auto;max-width:100%;object-fit:contain;object-position:left center;display:block;position:relative}
+.venue.calm .vlogo{opacity:.7}
+:root[data-theme="light"] .venue .vlogo{filter:brightness(0)}
+:root[data-theme="light"] .venue.calm .vlogo{opacity:.6}

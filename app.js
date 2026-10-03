@@ -282,6 +282,9 @@ function venueTags(i){
   return h('div',{class:'chips-row'}, ids.map(id=>h('span',{class:'chip',style:'--c:'+vColor(id)},h('i'),venueName(id))));
 }
 const wrenchBadge = n => h('span',{class:'pw',html:I.wrench+n});
+// Venue logos (white artwork, shown black in light mode), keyed by venue id so renaming a venue keeps its logo.
+const LOGOS = new Set(['v1','v2','v3','v4','v5','v6','v7','xmusti0bzrmndx']);
+const venueMark = v => LOGOS.has(v.id) ? h('img',{class:'vlogo',src:'logos/'+v.id+'.png',alt:v.name,decoding:'async'}) : h('b',{},v.name);
 
 function fill(r){
   if (r.name==='home') fillHome();
@@ -326,8 +329,8 @@ function fillHome(){
   if (!vs.length) slots.venues.append(h('button',{class:'add-venue',style:'grid-column:1/-1',onclick:()=>venueSheet(null),html:I.plus+'<span>Add your first venue</span>'}));
   for (const v of vs){
     const vo = openNotes(v.id), vn = vo.filter(i=>i.priority===1).length, vf = openJobs(v.id).length;
-    slots.venues.append(h('button',{class:'venue'+(vo.length||vf?'':' calm'),style:'--c:'+vColor(v.id),onclick:()=>go('v-'+v.id)},
-      h('b',{},v.name),
+    slots.venues.append(h('button',{class:'venue'+(vo.length||vf?'':' calm'),style:'--c:'+vColor(v.id),'aria-label':v.name,onclick:()=>go('v-'+v.id)},
+      venueMark(v),
       h('span',{class:'n'}, vo.length||vf? [vn? h('span',{class:'pw red'},String(vn)) : null, vo.length? h('span',{class:'pw'},String(vo.length)) : null, vf? wrenchBadge(vf) : null]
                                          : h('span',{class:'clear'},'All clear'))));
   }
