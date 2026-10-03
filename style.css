@@ -306,3 +306,10 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .nowcard{flex:0 0 min(64%,240px);padding:10px 12px;gap:6px}
 .nowcard p{-webkit-line-clamp:2;font-size:14px;line-height:1.35}
 .nowcard .check{width:22px;height:22px}
+/* one-time "turn on notifications" card */
+.ask{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:18px;background:color-mix(in srgb,var(--accent) 14%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);flex-wrap:wrap}
+.ask .ic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 22%,transparent);color:var(--accent-soft);flex:none}
+.ask .tx{flex:1;min-width:150px;display:flex;flex-direction:column;gap:2px}
+.ask .tx small{color:var(--muted);font-size:13px}
+.ask-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
+.ask-actions .go{margin-left:0}

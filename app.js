@@ -226,6 +226,7 @@ function buildShell(r){
     slots.shortcuts = h('div',{class:'shortcuts'}); slots.venues = h('div',{class:'grid'});
     app.append(
       h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), themeBtn(), bell(), gear()),
+      (slots.ask = h('div',{})),
       slots.maint, h('div',{class:'mili-head'}, h('h2',{},'Mili')), slots.hero, slots.now, slots.shortcuts,
       h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{},'Venues'), h('button',{onclick:()=>venueSheet(null)},'+ Add')), slots.venues));
   } else if (r.name==='venue'){
@@ -234,7 +235,8 @@ function buildShell(r){
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'group',style:'gap:14px'});
-    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
+    slots.ask = isOwner()? null : h('div',{});
+    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
@@ -301,6 +303,7 @@ function fill(r){
 }
 
 function fillHome(){
+  fillPushAsk();
   const jo = openJobs(), late = jo.filter(isLate).length;
   const open = openNotes(), vs = [...S.venues].sort(byOrder);
   const nowN = open.filter(i=>i.priority===1).length;
@@ -354,6 +357,7 @@ function fillVenue(id){
 }
 
 function fillMaintenance(){
+  fillPushAsk();
   const tab = S.jobTab;
   const closed = S.jobs.filter(j=>j.done||j.deleted);
   slots.tabs.replaceChildren(...[['open','Open · '+openJobs().length],['closed','Done · '+closed.length]].map(([t,label])=>
@@ -573,6 +577,31 @@ async function turnOffPush(){
   const {error} = await S.sb.rpc('set_my_push',{enabled:false});
   if (error){ toast(errText(error)); return; }
   S.pushEnabled = false; toast('Notifications off'); fillNotifications();
+}
+// Every open: if this phone already allowed notifications, make sure the server has its current address.
+// (Phones occasionally renew it, and this also repairs a registration that was removed.)
+async function refreshPushRegistration(){
+  try {
+    if (!pushSupported() || Notification.permission!=='granted' || !S.pushEnabled || !(window.OPS_CONFIG||{}).vapidPublicKey) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:keyBytes(window.OPS_CONFIG.vapidPublicKey)});
+    const j = sub.toJSON();
+    await S.sb.rpc('save_push_subscription',{p_endpoint:j.endpoint, p_p256dh:j.keys.p256dh, p_auth:j.keys.auth, p_user_agent:navigator.userAgent});
+  } catch {}
+}
+// A one-time card asking to turn notifications on (phones require a tap to allow them; this makes it one tap).
+const ASK_KEY = 'ops-push-asked';
+async function fillPushAsk(){
+  const box = slots.ask; if (!box || box._done) return; box._done = true;
+  let asked = false; try { asked = !!localStorage.getItem(ASK_KEY); } catch {}
+  if (asked || !pushSupported() || (isIOS && !installed()) || Notification.permission!=='default' || !(window.OPS_CONFIG||{}).vapidPublicKey) return;
+  const dismiss = () => { try { localStorage.setItem(ASK_KEY,'1'); } catch {} box.replaceChildren(); };
+  box.replaceChildren(h('div',{class:'ask'},
+    h('span',{class:'ic',html:I.bell}),
+    h('span',{class:'tx'}, h('b',{},'Turn on notifications?'), h('small',{}, isOwner()||S.role==='manager' ? 'Hear about new comments. Never at night.' : 'Hear about new jobs and comments. Never at night.')),
+    h('div',{class:'ask-actions'},
+      h('button',{class:'go',onclick:async()=>{ dismiss(); await turnOnPush(); }},'Turn on'),
+      h('button',{class:'link',style:'color:var(--muted)',onclick:dismiss},'Not now'))));
 }
 async function fillNotifications(){
   const box = slots.notif; if (!box) return;
@@ -1076,6 +1105,7 @@ async function start(){
   channel = S.sb.channel('ops');
   for (const t of tablesForRole()) channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{ reloadSoon(t); if (t==='members') loadTeam(); });
   channel.subscribe();
+  refreshPushRegistration();
 }
 function offlineBadge(){
   document.querySelector('.offline')?.remove();
