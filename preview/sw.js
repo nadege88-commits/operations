@@ -1,5 +1,5 @@
 // Keeps the app shell on the phone so it opens instantly and without signal. Data always comes live from Supabase.
-const VERSION = 'ops-preview-v2';
+const VERSION = 'ops-preview-v3';
 const SHELL = ['./','index.html','style.css','app.js','config.js','manifest.webmanifest','icons/apple-touch-icon.png','icons/icon-192.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
@@ -16,4 +16,21 @@ self.addEventListener('fetch', e => {
     }
     return res;
   }).catch(() => caches.match(e.request).then(r => r || caches.match('index.html'))));
+});
+
+// Push: show the notification (same tag replaces the previous one instead of stacking) and open the right screen on tap.
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data.json(); } catch { d = {title:'Operations', body:e.data ? e.data.text() : ''}; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Operations', {
+    body: d.body || '', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', tag: d.tag || 'ops', data: {url: d.url || '#'}
+  }));
+});
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const target = self.registration.scope + (e.notification.data?.url || '');
+  e.waitUntil(self.clients.matchAll({type:'window', includeUncontrolled:true}).then(list => {
+    for (const c of list) if ('focus' in c) { if ('navigate' in c) c.navigate(target).catch(()=>{}); return c.focus(); }
+    return self.clients.openWindow(target);
+  }));
 });
