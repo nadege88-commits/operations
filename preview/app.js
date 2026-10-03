@@ -234,7 +234,7 @@ function buildShell(r){
     app.append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
-    slots.list = h('div',{class:'group',style:'gap:14px'});
+    slots.list = h('div',{class:'group',style:'gap:26px'});
     slots.ask = isOwner()? null : h('div',{});
     app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
   } else if (r.name==='archive'){
