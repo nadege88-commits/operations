@@ -1,7 +1,7 @@
 // Keeps the app shell on the phone so it opens instantly and without signal. Data always comes live from Supabase.
-const VERSION = 'ops-v1';
+const VERSION = 'ops-v2';
 const SHELL = ['./','index.html','style.css','app.js','config.js','manifest.webmanifest','icons/apple-touch-icon.png','icons/icon-192.png',
-  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js'];
+  'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim()));
