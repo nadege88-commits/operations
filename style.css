@@ -301,3 +301,8 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .venue:has(.vlogo){align-items:center;text-align:center}
 .venue .vlogo{object-position:center;margin-inline:auto}
 .venue:has(.vlogo) .n{justify-content:center}
+/* Now strip: stays inside the page margins like everything else; shorter, narrower cards */
+.strip{margin-inline:0;padding-inline:0;border-radius:16px}
+.nowcard{flex:0 0 min(64%,240px);padding:10px 12px;gap:6px}
+.nowcard p{-webkit-line-clamp:2;font-size:14px;line-height:1.35}
+.nowcard .check{width:22px;height:22px}
