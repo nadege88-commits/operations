@@ -183,6 +183,7 @@ async function jobDelete(j){
   return ok;
 }
 async function jobRestore(j){
+  if (!canClose()) return;
   if (await updateRow('jobs', j.id, j.deleted? {deleted:false,deletedAt:null} : {done:false,doneAt:null})) toast('Restored');
 }
 
@@ -216,6 +217,7 @@ function render(force){
 
 function buildShell(r){
   app.replaceChildren();
+  const append = (...els) => app.append(...els.filter(Boolean));
   const back = () => h('button',{class:'icon-btn','aria-label':'Back',onclick:goBack,html:I.back});
   const gear = () => h('button',{class:'icon-btn','aria-label':'Settings',onclick:()=>go('settings'),html:I.gear});
   const bell = () => (slots.bell = h('button',{class:'icon-btn bell','aria-label':'Inbox',onclick:()=>go('inbox')}));
@@ -224,37 +226,37 @@ function buildShell(r){
     slots.maint = h('div',{});
     slots.hero = h('div',{class:'hero'}); slots.now = h('div',{class:'group'});
     slots.shortcuts = h('div',{class:'shortcuts'}); slots.venues = h('div',{class:'grid'});
-    app.append(
+    append(
       h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), themeBtn(), bell(), gear()),
       (slots.ask = h('div',{})),
       slots.maint, h('div',{class:'mili-head'}, h('h2',{},'Mili')), slots.hero, slots.now, slots.shortcuts,
       h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{},'Venues'), h('button',{onclick:()=>venueSheet(null)},'+ Add')), slots.venues));
   } else if (r.name==='venue'){
     slots.head = h('div',{class:'vhead'}); slots.open = h('div',{class:'items'}); slots.vjobs = h('div',{class:'group'});
-    app.append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
+    append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'group',style:'gap:26px'});
     slots.ask = isOwner()? null : h('div',{});
-    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
+    append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
     const q = h('input',{id:'archive-search',type:'search',class:'search',placeholder:'Search','aria-label':'Search done and deleted'});
     q.addEventListener('input',()=>{ S.archiveQ = q.value; render(); });
     q.value = S.archiveQ||'';
-    app.append(h('div',{class:'top'}, back(), h('h1',{},'Archive')), slots.tabs, q, slots.list);
+    append(h('div',{class:'top'}, back(), h('h1',{},'Archive')), slots.tabs, q, slots.list);
   } else if (r.name==='essentials'){
     slots.list = h('div',{class:'list'});
-    app.append(h('div',{class:'top'}, back(), h('h1',{},'Essentials')), slots.list);
+    append(h('div',{class:'top'}, back(), h('h1',{},'Essentials')), slots.list);
   } else if (r.name==='job' || r.name==='note'){
     slots.detail = h('div',{class:'group',style:'gap:14px'});
     slots.thread = h('div',{class:'thread'});
-    app.append(h('div',{class:'top'}, back(), h('h1',{style:'font-size:22px'}, r.name==='job'?'Job':'Note'), slots.detailTools = h('div',{style:'display:flex;gap:6px'})),
+    append(h('div',{class:'top'}, back(), h('h1',{style:'font-size:22px'}, r.name==='job'?'Job':'Note'), slots.detailTools = h('div',{style:'display:flex;gap:6px'})),
       slots.detail, h('div',{class:'sec'}, h('h2',{},'Comments')), slots.thread, commentForm(r.name, r.id));
   } else if (r.name==='inbox'){
     slots.list = h('div',{class:'list'});
-    app.append(h('div',{class:'top'}, back(), h('h1',{},'Inbox'),
+    append(h('div',{class:'top'}, back(), h('h1',{},'Inbox'),
       h('button',{class:'link',onclick:markAllRead},'Mark all read')), slots.list);
   } else if (r.name==='settings'){
     slots.people = h('div',{class:'group'});
@@ -264,7 +266,7 @@ function buildShell(r){
       const {error} = await S.sb.rpc('set_my_name',{new_name:myName.value});
       if (error) toast(errText(error)); else { toast('Name saved'); loadTeam(); if (isOwner()) load('members'); }
     };
-    app.append(h('div',{class:'top'}, back(), h('h1',{},'Settings')),
+    append(h('div',{class:'top'}, back(), h('h1',{},'Settings')),
       h('div',{class:'list'},
         h('div',{class:'add-member'}, h('label',{for:'my-name',class:'date'},'Your name'), h('div',{class:'add-bar',style:'flex-wrap:nowrap'}, myName, h('button',{class:'go',onclick:saveName},'Save'))),
         h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+ROLE[S.role].c}, ROLE[S.role].label)),
@@ -637,7 +639,7 @@ function closedJobRow(j){
     h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('job-'+j.id)}, h('span',{class:'date'}, venueTag(j)+' · '+shortDate(j.deletedAt||j.doneAt),
         j.deleted? [' · ', h('span',{class:'tag-del'},'Deleted')] : (isOwner() && j.doneBy? ' · Done by '+nameOf(j.doneBy) : null)),
       j.text? h('span',{},linkify(j.text)) : null, thumbs(j.photos)),
-    h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore'));
+    canClose()? h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore') : null);
 }
 function nowCard(i){
   const first = liveVids(i)[0];
