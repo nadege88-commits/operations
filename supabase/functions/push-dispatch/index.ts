@@ -41,9 +41,12 @@ async function sendTo(email: string, payload: Record<string, unknown>) {
   return sent;
 }
 
-async function dispatch() {
+// Test project only (ALLOW_TEST_FORCE=1): lets a test run ignore the clock. Never set on the live project.
+const canForce = Deno.env.get("ALLOW_TEST_FORCE") === "1";
+
+async function dispatch(force = false) {
   const hour = localHour();
-  if (hour >= 21 || hour < 8) return { quiet: true };
+  if ((hour >= 21 || hour < 8) && !(force && canForce)) return { quiet: true };
 
   const { data: members } = await sb.from("members").select("email,role,name,push_enabled,last_push_at");
   const { data: rows } = await sb.from("inbox").select("id,recipient,kind,job_id,note_id,actor,preview,created_at").is("pushed_at", null).order("id");
@@ -91,8 +94,8 @@ async function dispatch() {
 }
 
 // 08:00 Malta: one reminder per maintenance person, only if jobs are due today or late.
-async function morning() {
-  if (localHour() !== 8) return { morning: "not 8:00 in Malta" };
+async function morning(force = false) {
+  if (localHour() !== 8 && !(force && canForce)) return { morning: "not 8:00 in Malta" };
   const today = localDate();
   const { data: due } = await sb.from("jobs").select("id,text,due").eq("done", false).eq("deleted", false).lte("due", today).order("due");
   if (!due?.length) return { morning: "nothing due" };
@@ -107,7 +110,7 @@ async function morning() {
 
 Deno.serve(async (req) => {
   if (req.headers.get("x-cron-secret") !== Deno.env.get("CRON_SECRET")) return new Response("Forbidden", { status: 403 });
-  const { mode } = await req.json().catch(() => ({ mode: "dispatch" }));
-  const result = mode === "morning" ? await morning() : await dispatch();
+  const { mode, force } = await req.json().catch(() => ({ mode: "dispatch", force: false }));
+  const result = mode === "morning" ? await morning(!!force) : await dispatch(!!force);
   return Response.json(result);
 });
