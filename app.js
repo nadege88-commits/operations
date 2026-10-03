@@ -234,14 +234,9 @@ function buildShell(r){
     app.append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
-<<<<<<< HEAD
     slots.list = h('div',{class:'group',style:'gap:26px'});
-    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
-=======
-    slots.list = h('div',{class:'group',style:'gap:14px'});
     slots.ask = isOwner()? null : h('div',{});
     app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
->>>>>>> push
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
