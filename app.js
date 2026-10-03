@@ -27,7 +27,7 @@ const I = {
 const PRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'},3:{label:'Low',c:'var(--later)'}};
 const JPRIO = PRIO;
 
-const S = {sb:null, session:null, email:'', role:null, venues:[], notes:[], jobs:[], essentials:[], members:[], team:[], comments:[], inbox:[],
+const S = {sb:null, session:null, email:'', role:null, pushEnabled:true, venues:[], notes:[], jobs:[], essentials:[], members:[], team:[], comments:[], inbox:[],
   archiveTab:'done', archiveQ:'', jobTab:'open', online:navigator.onLine, ready:false, depth:0};
 let shellKey = null;
 
@@ -226,6 +226,7 @@ function buildShell(r){
     slots.shortcuts = h('div',{class:'shortcuts'}); slots.venues = h('div',{class:'grid'});
     app.append(
       h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), themeBtn(), bell(), gear()),
+      (slots.ask = h('div',{})),
       slots.maint, h('div',{class:'mili-head'}, h('h2',{},'Mili')), slots.hero, slots.now, slots.shortcuts,
       h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{},'Venues'), h('button',{onclick:()=>venueSheet(null)},'+ Add')), slots.venues));
   } else if (r.name==='venue'){
@@ -233,8 +234,14 @@ function buildShell(r){
     app.append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
+<<<<<<< HEAD
     slots.list = h('div',{class:'group',style:'gap:26px'});
     app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
+=======
+    slots.list = h('div',{class:'group',style:'gap:14px'});
+    slots.ask = isOwner()? null : h('div',{});
+    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
+>>>>>>> push
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
@@ -266,6 +273,7 @@ function buildShell(r){
       h('div',{class:'list'},
         h('div',{class:'add-member'}, h('label',{for:'my-name',class:'date'},'Your name'), h('div',{class:'add-bar',style:'flex-wrap:nowrap'}, myName, h('button',{class:'go',onclick:saveName},'Save'))),
         h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+ROLE[S.role].c}, ROLE[S.role].label)),
+        (slots.notif = h('div',{})),
         h('div',{class:'member'}, h('span',{class:'em'},'Appearance'), h('div',{class:'theme-pick'},
           ...[['dark','Dark'],['light','Light']].map(([t,l])=>h('button',{class:'pill',style:'--c:var(--accent)','aria-pressed':String(getTheme()===t),onclick:()=>setTheme(t)}, l))))),
       slots.people,
@@ -296,9 +304,11 @@ function fill(r){
   else if (r.name==='job' || r.name==='note') fillDetail(r.name, r.id);
   else if (r.name==='inbox') fillInbox();
   if (slots.bell){ const n = unread(); slots.bell.innerHTML = I.bell + (n? '<span class="dot">'+(n>9?'9+':n)+'</span>' : ''); }
+  setIconBadge(unread());
 }
 
 function fillHome(){
+  fillPushAsk();
   const jo = openJobs(), late = jo.filter(isLate).length;
   const open = openNotes(), vs = [...S.venues].sort(byOrder);
   const nowN = open.filter(i=>i.priority===1).length;
@@ -352,6 +362,7 @@ function fillVenue(id){
 }
 
 function fillMaintenance(){
+  fillPushAsk();
   const tab = S.jobTab;
   const closed = S.jobs.filter(j=>j.done||j.deleted);
   slots.tabs.replaceChildren(...[['open','Open · '+openJobs().length],['closed','Done · '+closed.length]].map(([t,label])=>
@@ -400,6 +411,7 @@ function rolePills(start, onChange){
   return {el:h('div',{class:'prio',style:'flex-wrap:wrap'},pills), value:()=>role};
 }
 function fillSettings(){
+  if (!slots.notif._done){ slots.notif._done = true; fillNotifications(); }
   if (!isOwner()){ slots.people.replaceChildren(); return; }
   if (!slots.people._built){
     slots.people._built = true;
@@ -527,6 +539,84 @@ function fillInbox(){
         n.kind==='comment' && n.preview && n.preview!==title? h('span',{class:'pv q'},'"'+n.preview+'"') : null),
       h('span',{class:'date'}, when(n.created_at)));
   }));
+}
+
+/* ---------- push notifications (opt-in per phone; rules live in the server sender) ---------- */
+let lastBadge = -1;
+function setIconBadge(n){
+  if (n===lastBadge || !('setAppBadge' in navigator)) return;
+  lastBadge = n;
+  (n? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(()=>{});
+}
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const installed = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const keyBytes = b64 => { const s = atob((b64+'='.repeat((4-b64.length%4)%4)).replace(/-/g,'+').replace(/_/g,'/')); return Uint8Array.from(s, c=>c.charCodeAt(0)); };
+async function mySubscription(){
+  if (!pushSupported()) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+async function pushStatus(){
+  if (isIOS && !installed()) return 'install';
+  if (!pushSupported() || !(window.OPS_CONFIG||{}).vapidPublicKey) return 'unsupported';
+  if (Notification.permission==='denied') return 'blocked';
+  const sub = await mySubscription();
+  return sub && Notification.permission==='granted' && S.pushEnabled ? 'on' : 'off';
+}
+async function turnOnPush(){
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm!=='granted'){ toast('Notifications were not allowed.'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:keyBytes(window.OPS_CONFIG.vapidPublicKey)});
+    const j = sub.toJSON();
+    const {error} = await S.sb.rpc('save_push_subscription',{p_endpoint:j.endpoint, p_p256dh:j.keys.p256dh, p_auth:j.keys.auth, p_user_agent:navigator.userAgent});
+    if (error) throw error;
+    await S.sb.rpc('set_my_push',{enabled:true}); S.pushEnabled = true;
+    toast('Notifications on');
+  } catch { toast('Could not turn on notifications. Try again.'); }
+  fillNotifications();
+}
+async function turnOffPush(){
+  const {error} = await S.sb.rpc('set_my_push',{enabled:false});
+  if (error){ toast(errText(error)); return; }
+  S.pushEnabled = false; toast('Notifications off'); fillNotifications();
+}
+// Every open: if this phone already allowed notifications, make sure the server has its current address.
+// (Phones occasionally renew it, and this also repairs a registration that was removed.)
+async function refreshPushRegistration(){
+  try {
+    if (!pushSupported() || Notification.permission!=='granted' || !S.pushEnabled || !(window.OPS_CONFIG||{}).vapidPublicKey) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription() || await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:keyBytes(window.OPS_CONFIG.vapidPublicKey)});
+    const j = sub.toJSON();
+    await S.sb.rpc('save_push_subscription',{p_endpoint:j.endpoint, p_p256dh:j.keys.p256dh, p_auth:j.keys.auth, p_user_agent:navigator.userAgent});
+  } catch {}
+}
+// A one-time card asking to turn notifications on (phones require a tap to allow them; this makes it one tap).
+const ASK_KEY = 'ops-push-asked';
+async function fillPushAsk(){
+  const box = slots.ask; if (!box || box._done) return; box._done = true;
+  let asked = false; try { asked = !!localStorage.getItem(ASK_KEY); } catch {}
+  if (asked || !pushSupported() || (isIOS && !installed()) || Notification.permission!=='default' || !(window.OPS_CONFIG||{}).vapidPublicKey) return;
+  const dismiss = () => { try { localStorage.setItem(ASK_KEY,'1'); } catch {} box.replaceChildren(); };
+  box.replaceChildren(h('div',{class:'ask'},
+    h('span',{class:'ic',html:I.bell}),
+    h('span',{class:'tx'}, h('b',{},'Turn on notifications?'), h('small',{}, isOwner()||S.role==='manager' ? 'Hear about new comments on your jobs.' : 'Hear about new jobs and comments.')),
+    h('div',{class:'ask-actions'},
+      h('button',{class:'go',onclick:async()=>{ dismiss(); await turnOnPush(); }},'Turn on'),
+      h('button',{class:'link',style:'color:var(--muted)',onclick:dismiss},'Not now'))));
+}
+async function fillNotifications(){
+  const box = slots.notif; if (!box) return;
+  const st = await pushStatus();
+  const text = {install:'To get notifications on iPhone, add Operations to your Home Screen (Share → Add to Home Screen) and open it from there.',
+    unsupported:'This browser cannot show notifications.', blocked:'Notifications are blocked. Allow them for Operations in your phone settings.',
+    on:'On. You get new comments and, for maintenance, new jobs.', off:'Off. Turn on to hear about new comments on your jobs.'}[st];
+  box.replaceChildren(h('div',{class:'member'}, h('span',{class:'em'}, h('b',{},'Notifications'), h('small',{class:'date',style:'display:block'}, text)),
+    st==='on'? h('button',{class:'pill',style:'--c:var(--accent)',onclick:turnOffPush},'Turn off')
+    : st==='off'? h('button',{class:'pill',style:'--c:var(--accent)','aria-pressed':'true',onclick:turnOnPush},'Turn on') : null));
 }
 
 /* ---------- rows ---------- */
@@ -995,6 +1085,7 @@ function notMemberScreen(){
     h('button',{class:'link',onclick:signOut},'Sign out')));
 }
 async function signOut(){
+  try { const sub = await mySubscription(); if (sub) await S.sb.rpc('remove_push_subscription',{p_endpoint:sub.endpoint}); } catch {}
   await S.sb.auth.signOut();
   try { localStorage.removeItem(CACHE); } catch {}
   location.hash = ''; authScreen('signin');
@@ -1007,10 +1098,11 @@ async function start(){
   if (!session){ authScreen('signin'); return; }
   S.email = (session.user.email||'').toLowerCase();
   if (loadCache(S.email) && S.role){ S.ready = true; render(true); }      // instant open from the last copy
-  const {data, error} = await S.sb.from('members').select('role').eq('email', S.email).maybeSingle();
+  const {data, error} = await S.sb.from('members').select('role,push_enabled').eq('email', S.email).maybeSingle();
   if (error){ if (!S.ready) app.replaceChildren(h('p',{class:'status'},'No connection. Open again when you have signal.')); return; }
   if (!data){ notMemberScreen(); return; }
   if (S.role && S.role!==data.role) shellKey = null;
+  S.pushEnabled = data.push_enabled !== false;
   S.role = data.role; S.ready = true;
   await Promise.all([...tablesForRole().map(load), loadTeam()]);
   render(true);
@@ -1018,6 +1110,7 @@ async function start(){
   channel = S.sb.channel('ops');
   for (const t of tablesForRole()) channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{ reloadSoon(t); if (t==='members') loadTeam(); });
   channel.subscribe();
+  refreshPushRegistration();
 }
 function offlineBadge(){
   document.querySelector('.offline')?.remove();
