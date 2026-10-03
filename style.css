@@ -263,3 +263,29 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .viewer video{max-width:100%;max-height:100%;border-radius:8px;background:#000}
 .viewer .close{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:12px;font-size:22px;background:rgba(255,255,255,.12);border:0;color:#fff}
 .member .em b{font-weight:700}
+
+/* Light mode (for bright daylight). Dark stays the default; each phone remembers its own choice. */
+:root[data-theme="light"]{
+  --bg:#F3F4F8; --surface:#FFFFFF; --raised:#FFFFFF; --ink:#11131A; --muted:#565C70; --line:#DCE0EA;
+  --accent:#3552D6; --accent-ink:#FFFFFF; --accent-soft:#2F4BCB;
+  --now:#D92D3F; --soon:#B06F00; --later:#6B7289; --fix:#2563D8;
+  --v1:#E04B33; --v2:#C27F00; --v3:#0D967A; --v4:#3A5FE5; --v5:#D63370; --v6:#5A9411; --v7:#7A4DE8; --v8:#D9661C;
+  color-scheme:light;
+}
+:root[data-theme="light"] .hero{background:linear-gradient(160deg,#E4E9FB,#F8F9FE 75%);border-color:#D3DAF2}
+:root[data-theme="light"] .stat span{color:var(--muted)}
+:root[data-theme="light"] .pw{color:var(--ink)}
+:root[data-theme="light"] .pw.red,:root[data-theme="light"] .vhead .pw{color:#fff}
+:root[data-theme="light"] .venue{background:color-mix(in srgb,var(--c) 11%,#fff);border-color:color-mix(in srgb,var(--c) 45%,transparent)}
+:root[data-theme="light"] .venue.calm{background:var(--surface);border-color:var(--line)}
+:root[data-theme="light"] .vhead{background:linear-gradient(150deg,var(--c),color-mix(in srgb,var(--c) 72%,#000))}
+:root[data-theme="light"] .pill[aria-pressed="true"]{color:#fff}
+:root[data-theme="light"] .pill[aria-pressed="true"] i{background:#fff}
+:root[data-theme="light"] .it,:root[data-theme="light"] .tile,:root[data-theme="light"] .big,:root[data-theme="light"] .list,
+:root[data-theme="light"] .nowcard,:root[data-theme="light"] .dcard,:root[data-theme="light"] .add,:root[data-theme="light"] .venue{box-shadow:0 1px 3px rgba(17,19,26,.06)}
+:root[data-theme="light"] .it::before{box-shadow:none}
+:root[data-theme="light"] .inrow .ic{background:var(--bg)}
+:root[data-theme="light"] .undo{color:#A9B9FF}
+:root[data-theme="light"] .scrim{background:rgba(17,19,26,.35)}
+.theme-pick{display:flex;gap:6px}
+.meta .due svg{color:inherit}
