@@ -119,7 +119,7 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .txt .chips-row{white-space:normal}
 .meta{display:flex;align-items:center;gap:5px;flex:none;color:var(--muted);font-size:11px;font-weight:600;padding-top:3px;font-variant-numeric:tabular-nums}
 .meta svg{width:14px;height:14px;color:var(--fix)}
-.group-h{display:flex;align-items:center;gap:8px;font-weight:800;font-size:21px;letter-spacing:-.02em;line-height:1.15;padding-bottom:8px;border-bottom:2px solid var(--accent)}
+.group-h{display:flex;align-items:center;gap:8px;font-weight:800;font-size:21px;letter-spacing:-.02em;line-height:1.15;padding-bottom:8px;border-bottom:2px solid var(--c)}
 .group-h i{width:12px;height:12px;border-radius:4px;background:var(--c)}
 .group-h small{color:var(--muted);font-weight:600;font-size:13px;letter-spacing:0;margin-left:auto}
 
