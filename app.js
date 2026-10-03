@@ -282,6 +282,9 @@ function venueTags(i){
   return h('div',{class:'chips-row'}, ids.map(id=>h('span',{class:'chip',style:'--c:'+vColor(id)},h('i'),venueName(id))));
 }
 const wrenchBadge = n => h('span',{class:'pw',html:I.wrench+n});
+// Venue logos (white artwork, shown black in light mode), keyed by venue id so renaming a venue keeps its logo.
+const LOGOS = new Set(['v1','v2','v3','v4','v5','v6','v7','v8','xmusti0bzrmndx']);
+const venueMark = v => LOGOS.has(v.id) ? h('img',{class:'vlogo',src:'logos/'+v.id+'.png',alt:v.name,decoding:'async'}) : h('b',{},v.name);
 
 function fill(r){
   if (r.name==='home') fillHome();
@@ -326,8 +329,8 @@ function fillHome(){
   if (!vs.length) slots.venues.append(h('button',{class:'add-venue',style:'grid-column:1/-1',onclick:()=>venueSheet(null),html:I.plus+'<span>Add your first venue</span>'}));
   for (const v of vs){
     const vo = openNotes(v.id), vn = vo.filter(i=>i.priority===1).length, vf = openJobs(v.id).length;
-    slots.venues.append(h('button',{class:'venue'+(vo.length||vf?'':' calm'),style:'--c:'+vColor(v.id),onclick:()=>go('v-'+v.id)},
-      h('b',{},v.name),
+    slots.venues.append(h('button',{class:'venue'+(vo.length||vf?'':' calm'),style:'--c:'+vColor(v.id),'aria-label':v.name,onclick:()=>go('v-'+v.id)},
+      venueMark(v),
       h('span',{class:'n'}, vo.length||vf? [vn? h('span',{class:'pw red'},String(vn)) : null, vo.length? h('span',{class:'pw'},String(vo.length)) : null, vf? wrenchBadge(vf) : null]
                                          : h('span',{class:'clear'},'All clear'))));
   }
@@ -712,7 +715,39 @@ function photoImg(path){
   photoSrc(path).then(src=>{ if (src) img.src = src; else img.classList.add('missing'); });
   return img;
 }
-const mediaThumb = p => isVideo(p) ? h('span',{class:'vid',html:I.play}) : photoImg(p);
+// Video tiles show a still frame with a play button. New videos get a frame saved next to them (<video>.jpg);
+// older ones without it fall back to the video's own first frame.
+function videoThumb(p){
+  const box = h('span',{class:'vid'}, h('span',{class:'play',html:I.play}));
+  photoSrc(p+'.jpg').then(src=>{
+    if (src){ box.prepend(h('img',{src,alt:''})); return; }
+    photoSrc(p).then(vs=>{ if (vs) box.prepend(h('video',{src:vs+'#t=0.1',muted:true,playsinline:true,preload:'metadata','aria-hidden':'true'})); });
+  });
+  return box;
+}
+const mediaThumb = p => isVideo(p) ? videoThumb(p) : photoImg(p);
+// Grab a still frame from a video on the phone (best effort; some formats cannot be read, then there is simply no poster).
+function videoPoster(file){
+  return new Promise(resolve=>{
+    const url = URL.createObjectURL(file);
+    const v = document.createElement('video');
+    let done = false;
+    const finish = blob => { if (done) return; done = true; URL.revokeObjectURL(url); v.removeAttribute('src'); v.load(); resolve(blob); };
+    setTimeout(()=>finish(null), 6000);
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.addEventListener('loadeddata', ()=>{ try { v.currentTime = Math.min(0.5, (v.duration||1)/3); } catch { finish(null); } });
+    v.addEventListener('seeked', ()=>{
+      try {
+        const k = Math.min(1, 640/Math.max(v.videoWidth, v.videoHeight||1));
+        const c = document.createElement('canvas'); c.width = Math.round(v.videoWidth*k); c.height = Math.round(v.videoHeight*k);
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        c.toBlob(b=>finish(b), 'image/jpeg', 0.75);
+      } catch { finish(null); }
+    });
+    v.addEventListener('error', ()=>finish(null));
+    v.src = url; v.load();
+  });
+}
 function thumbs(paths){
   if (!paths?.length) return null;
   return h('div',{class:'thumbs'}, paths.map(p=>h('button',{class:'thumb','aria-label':isVideo(p)?'Play video':'Open photo',onclick:e=>{ e.stopPropagation(); viewPhoto(p); }}, mediaThumb(p))));
@@ -743,7 +778,7 @@ async function uploadPhoto(blob, folder, ext='jpg', type='image/jpeg'){
   photoCache.set(path, Promise.resolve(URL.createObjectURL(blob)));   // show it straight away without downloading it again
   return path;
 }
-function dropPhotos(paths){ if (paths.length) S.sb.storage.from('photos').remove(paths); }
+function dropPhotos(paths){ if (paths.length) S.sb.storage.from('photos').remove(paths.flatMap(p=>isVideo(p)? [p, p+'.jpg'] : [p])); }
 function photoPicker(initial, folder){
   let paths = [...initial], pending = 0;
   const picker = {removed:[], onchange:null, busy:()=>pending>0};
@@ -760,7 +795,13 @@ function photoPicker(initial, folder){
         if (f.type.startsWith('video/')){
           if (f.size > MAX_VIDEO){ toast('Video too long (max 50 MB, about 1 minute). Record a shorter clip.'); throw 0; }
           const ext = f.type==='video/quicktime'? 'mov' : f.type==='video/webm'? 'webm' : 'mp4';
-          paths.push(await uploadPhoto(f, folder, ext, f.type||'video/mp4'));
+          const path = await uploadPhoto(f, folder, ext, f.type||'video/mp4');
+          const poster = await videoPoster(f);
+          if (poster){
+            const {error} = await S.sb.storage.from('photos').upload(path+'.jpg', poster, {contentType:'image/jpeg'});
+            if (!error) photoCache.set(path+'.jpg', Promise.resolve(URL.createObjectURL(poster)));
+          }
+          paths.push(path);
         } else paths.push(await uploadPhoto(await shrink(f), folder));
       }
       catch (e) { if (e!==0) toast(navigator.onLine? 'That file could not be added.' : 'No connection. Add it when you have signal.'); }
