@@ -14,14 +14,19 @@ const I = {
   pin:'<svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 4H6l4-4zM12 14v7"/></svg>',
   cal:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  bell:'<svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
+  chat:'<svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg>',
+  play:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
+  send:'<svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-6z"/></svg>',
+  attach:'<svg viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 17.5a2 2 0 0 1-3-3l7.5-7.5"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
 };
-// Mili's notes use Now/Soon/Later; maintenance jobs use High/Medium/Low. Same three colours.
-const PRIO = {1:{label:'Now',c:'var(--now)'},2:{label:'Soon',c:'var(--soon)'},3:{label:'Later',c:'var(--later)'}};
-const JPRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'},3:{label:'Low',c:'var(--later)'}};
+// Notes and jobs share High / Medium / Low.
+const PRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'},3:{label:'Low',c:'var(--later)'}};
+const JPRIO = PRIO;
 
-const S = {sb:null, session:null, email:'', role:null, venues:[], notes:[], jobs:[], essentials:[], members:[],
-  archiveTab:'done', archiveQ:'', jobTab:'open', online:navigator.onLine, ready:false};
+const S = {sb:null, session:null, email:'', role:null, venues:[], notes:[], jobs:[], essentials:[], members:[], team:[], comments:[], inbox:[],
+  archiveTab:'done', archiveQ:'', jobTab:'open', online:navigator.onLine, ready:false, depth:0};
 let shellKey = null;
 
 function h(tag, attrs, ...kids){
@@ -33,7 +38,7 @@ function h(tag, attrs, ...kids){
     else if (k==='style') el.style.cssText = v;
     else el.setAttribute(k, v===true?'':v);
   }
-  for (const k of kids.flat()) if (k!=null && k!==false) el.append(k.nodeType?k:document.createTextNode(k));
+  for (const k of kids.flat(Infinity)) if (k!=null && k!==false) el.append(k.nodeType?k:document.createTextNode(k));
   return el;
 }
 const newId = () => 'x' + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -50,6 +55,15 @@ const vColor = id => { const v = S.venues.find(x=>x.id===id); return v ? 'var(--
 const openNotes = vid => S.notes.filter(i=>!i.done && !i.deleted && (vid==null || vids(i).includes(vid)));
 const openJobs = vid => S.jobs.filter(j=>!j.done && !j.deleted && (vid==null || vids(j).includes(vid)));
 const isOwner = () => S.role==='owner';
+const canClose = () => S.role==='owner' || S.role==='maintenance';      // managers can comment but not finish or delete jobs
+const ROLE = {owner:{label:'Owner',c:'var(--v7)'}, manager:{label:'Manager',c:'var(--v3)'}, maintenance:{label:'Maintenance',c:'var(--fix)'}};
+const nameOf = email => { if (!email) return 'Someone'; const m = S.team.find(t=>t.email===email); return m?.name || email.split('@')[0]; };
+const isVideo = p => /\.(mp4|mov|m4v|webm)$/i.test(p||'');
+const when = t => { if (!t) return ''; const d = new Date(t);
+  const sameDay = d.toDateString()===new Date().toDateString();
+  return (sameDay? 'Today' : d.toLocaleDateString(undefined,{day:'numeric',month:'short'}))+' '+d.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'}); };
+const commentsFor = (kind,id) => S.comments.filter(c=>(kind==='job'? c.job_id : c.note_id)===id).sort((a,b)=>a.created_at.localeCompare(b.created_at));
+const unread = () => S.inbox.filter(n=>!n.read_at).length;
 
 const ymd = d => d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 const todayStr = () => ymd(new Date());
@@ -72,21 +86,24 @@ function toast(msg, undo){
 }
 
 /* ---------- data: Supabase rows <-> app objects ---------- */
-const COLS = {venueIds:'venue_ids', doneAt:'done_at', deletedAt:'deleted_at', createdAt:'created_at', all:'all_venues', order:'ord'};
+const COLS = {venueIds:'venue_ids', doneAt:'done_at', deletedAt:'deleted_at', createdAt:'created_at', all:'all_venues', order:'ord', createdBy:'created_by', doneBy:'done_by'};
 const BACK = Object.fromEntries(Object.entries(COLS).map(([k,v])=>[v,k]));
 const toRow = o => Object.fromEntries(Object.entries(o).map(([k,v])=>[COLS[k]||k, v]));
 const fromRow = r => Object.fromEntries(Object.entries(r).map(([k,v])=>[BACK[k]||k, v]));
-const TABLES = ['venues','notes','jobs','essentials','members'];
-const tablesForRole = () => isOwner() ? TABLES : ['venues','jobs'];
+const TABLES = ['venues','notes','jobs','essentials','members','comments','inbox'];
+const tablesForRole = () => isOwner() ? TABLES : ['venues','jobs','comments','inbox'];
+// comments and inbox keep their database field names (job_id, created_at …); the rest are mapped to camelCase.
+const RAW = new Set(['comments','inbox','members']);
 
-const CACHE = 'ops-cache-v1';
+// One cached copy per database, so the preview and the live app never mix data on the same phone.
+const CACHE = 'ops-cache-v2-' + ((window.OPS_CONFIG||{}).supabaseUrl||'').replace(/^https:\/\/|\..*$/g,'');
 function saveCache(){
-  try { localStorage.setItem(CACHE, JSON.stringify({email:S.email, role:S.role, venues:S.venues, notes:S.notes, jobs:S.jobs, essentials:S.essentials})); } catch {}
+  try { localStorage.setItem(CACHE, JSON.stringify({email:S.email, role:S.role, team:S.team, venues:S.venues, notes:S.notes, jobs:S.jobs, essentials:S.essentials, comments:S.comments, inbox:S.inbox})); } catch {}
 }
 function loadCache(email){
   try {
     const c = JSON.parse(localStorage.getItem(CACHE)||'null');
-    if (c && c.email===email){ Object.assign(S, {role:c.role, venues:c.venues||[], notes:c.notes||[], jobs:c.jobs||[], essentials:c.essentials||[]}); return true; }
+    if (c && c.email===email){ const {email:_, ...rest} = c; Object.assign(S, rest); return true; }
   } catch {}
   return false;
 }
@@ -96,10 +113,16 @@ function errText(error){
   return 'Could not save. Check the connection and try again.';
 }
 async function load(table){
-  const {data, error} = await S.sb.from(table).select('*');
+  let qry = S.sb.from(table).select('*');
+  if (table==='inbox') qry = qry.order('created_at',{ascending:false}).limit(150);
+  const {data, error} = await qry;
   if (error) return;
-  S[table] = data.map(fromRow);
+  S[table] = RAW.has(table) ? data : data.map(fromRow);
   saveCache(); render();
+}
+async function loadTeam(){
+  const {data, error} = await S.sb.rpc('team');
+  if (!error && data){ S.team = data; saveCache(); render(); }
 }
 let reloadTimers = {};
 const reloadSoon = t => { clearTimeout(reloadTimers[t]); reloadTimers[t] = setTimeout(()=>load(t), 150); };
@@ -137,6 +160,7 @@ async function restore(i){
   if (await updateRow('notes', i.id, i.deleted? {deleted:false,deletedAt:null} : {done:false,doneAt:null})) toast('Restored');
 }
 async function jobDone(j){
+  if (!canClose()) return;
   if (await updateRow('jobs', j.id, {done:true,doneAt:Date.now()})) toast('Job done', ()=>updateRow('jobs', j.id, {done:false,doneAt:null}));
 }
 async function jobDelete(j){
@@ -150,13 +174,18 @@ async function jobRestore(j){
 
 /* ---------- routing ---------- */
 function route(){
-  if (!isOwner()) return location.hash==='#settings' ? {name:'settings'} : {name:'maintenance'};
   const hsh = location.hash.slice(1);
-  if (['essentials','maintenance','archive','settings'].includes(hsh)) return {name:hsh};
+  if (hsh.startsWith('job-')) return {name:'job', id:hsh.slice(4)};
+  if (['settings','inbox'].includes(hsh)) return {name:hsh};
+  if (!isOwner()) return {name:'maintenance'};
+  if (hsh.startsWith('note-')) return {name:'note', id:hsh.slice(5)};
+  if (['essentials','maintenance','archive'].includes(hsh)) return {name:hsh};
   if (hsh.startsWith('v-')) return {name:'venue', id:hsh.slice(2)};
   return {name:'home'};
 }
-const go = r => { location.hash = r; };
+const go = r => { S.depth++; location.hash = r; };
+// Back returns to wherever she came from (a venue, Maintenance, the inbox), or home when opened directly.
+const goBack = () => { if (S.depth>0){ S.depth--; history.back(); } else location.hash = ''; };
 addEventListener('hashchange', ()=>{ render(true); scrollTo(0,0); });
 
 /* ---------- views ---------- */
@@ -173,15 +202,16 @@ function render(force){
 
 function buildShell(r){
   app.replaceChildren();
-  const back = () => h('button',{class:'icon-btn','aria-label':'Back',onclick:()=>go(''),html:I.back});
+  const back = () => h('button',{class:'icon-btn','aria-label':'Back',onclick:goBack,html:I.back});
   const gear = () => h('button',{class:'icon-btn','aria-label':'Settings',onclick:()=>go('settings'),html:I.gear});
+  const bell = () => (slots.bell = h('button',{class:'icon-btn bell','aria-label':'Inbox',onclick:()=>go('inbox')}));
   if (r.name==='home'){
     const today = new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
     slots.maint = h('div',{});
     slots.hero = h('div',{class:'hero'}); slots.now = h('div',{class:'group'});
     slots.shortcuts = h('div',{class:'shortcuts'}); slots.venues = h('div',{class:'grid'});
     app.append(
-      h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), gear()),
+      h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), bell(), gear()),
       slots.maint, h('div',{class:'mili-head'}, h('h2',{},'Mili')), slots.hero, slots.now, slots.shortcuts,
       h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{},'Venues'), h('button',{onclick:()=>venueSheet(null)},'+ Add')), slots.venues));
   } else if (r.name==='venue'){
@@ -190,7 +220,7 @@ function buildShell(r){
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'group',style:'gap:14px'});
-    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
+    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), isOwner()? null : bell(), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
@@ -201,11 +231,29 @@ function buildShell(r){
   } else if (r.name==='essentials'){
     slots.list = h('div',{class:'list'});
     app.append(h('div',{class:'top'}, back(), h('h1',{},'Essentials')), slots.list);
+  } else if (r.name==='job' || r.name==='note'){
+    slots.detail = h('div',{class:'group',style:'gap:14px'});
+    slots.thread = h('div',{class:'thread'});
+    app.append(h('div',{class:'top'}, back(), h('h1',{style:'font-size:22px'}, r.name==='job'?'Job':'Note'), slots.detailTools = h('div',{style:'display:flex;gap:6px'})),
+      slots.detail, h('div',{class:'sec'}, h('h2',{},'Comments')), slots.thread, commentForm(r.name, r.id));
+  } else if (r.name==='inbox'){
+    slots.list = h('div',{class:'list'});
+    app.append(h('div',{class:'top'}, back(), h('h1',{},'Inbox'),
+      h('button',{class:'link',onclick:markAllRead},'Mark all read')), slots.list);
   } else if (r.name==='settings'){
     slots.people = h('div',{class:'group'});
-    app.append(h('div',{class:'top'}, back(), h('h1',{},'Settings')), slots.people,
+    const myName = h('input',{id:'my-name',autocomplete:'name',placeholder:'Your name','aria-label':'Your name'});
+    myName.value = S.team.find(t=>t.email===S.email)?.name || '';
+    const saveName = async () => {
+      const {error} = await S.sb.rpc('set_my_name',{new_name:myName.value});
+      if (error) toast(errText(error)); else { toast('Name saved'); loadTeam(); if (isOwner()) load('members'); }
+    };
+    app.append(h('div',{class:'top'}, back(), h('h1',{},'Settings')),
       h('div',{class:'list'},
-        h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+(isOwner()?'var(--v7)':'var(--fix)')}, isOwner()?'Owner':'Maintenance')),
+        h('div',{class:'add-member'}, h('label',{for:'my-name',class:'date'},'Your name'), h('div',{class:'add-bar',style:'flex-wrap:nowrap'}, myName, h('button',{class:'go',onclick:saveName},'Save'))),
+        h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+ROLE[S.role].c}, ROLE[S.role].label))),
+      slots.people,
+      h('div',{class:'list'},
         isOwner()? h('button',{class:'add-row',onclick:importSheet},'Import from the old board') : null,
         h('button',{class:'add-row',style:'color:var(--now)',onclick:signOut},'Sign out')));
   }
@@ -226,6 +274,9 @@ function fill(r){
   else if (r.name==='archive') fillArchive();
   else if (r.name==='essentials') fillEssentials();
   else if (r.name==='settings') fillSettings();
+  else if (r.name==='job' || r.name==='note') fillDetail(r.name, r.id);
+  else if (r.name==='inbox') fillInbox();
+  if (slots.bell){ const n = unread(); slots.bell.innerHTML = I.bell + (n? '<span class="dot">'+(n>9?'9+':n)+'</span>' : ''); }
 }
 
 function fillHome(){
@@ -234,7 +285,7 @@ function fillHome(){
   const nowN = open.filter(i=>i.priority===1).length;
   slots.hero.replaceChildren(
     h('div',{class:'stats'},
-      h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'Now')),
+      h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'High')),
       h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--soon)'}),'Open')),
       h('div',{class:'stat'}, h('b',{},String(jo.length)), h('span',{},h('i',{style:'--c:var(--fix)'}),'Jobs'))),
     open.length? h('div',{class:'spread','aria-label':'Open notes per venue'},
@@ -273,7 +324,7 @@ function fillVenue(id){
   slots.head.style.setProperty('--c', vColor(id));
   slots.head.replaceChildren(
     h('div',{class:'bar'},
-      h('button',{class:'round','aria-label':'Back',onclick:()=>go(''),html:I.back}),
+      h('button',{class:'round','aria-label':'Back',onclick:goBack,html:I.back}),
       h('button',{class:'round','aria-label':'Rename venue',onclick:()=>venueSheet(v),html:I.edit})),
     h('h1',{},v.name),
     h('div',{class:'n'}, vn? h('span',{class:'pw red'},vn+' now') : null, h('span',{class:'pw'},vo.length+' open'), vj.length? h('span',{class:'pw'},vj.length+(vj.length>1?' jobs':' job')) : null));
@@ -322,68 +373,180 @@ function fillEssentials(){
   slots.list.replaceChildren(...rows, h('button',{class:'add-row',onclick:()=>infoSheet(null),html:I.plus+'<span>Add</span>'}));
 }
 
+function rolePills(start, onChange){
+  let role = start;
+  const keys = ['maintenance','manager','owner'];
+  const pills = keys.map(r=>h('button',{type:'button',class:'pill',style:'--c:'+ROLE[r].c,'aria-pressed':String(r===role),
+    onclick:()=>{ role=r; pills.forEach((b,k)=>b.setAttribute('aria-pressed',String(keys[k]===r))); onChange?.(r); }}, h('i'), ROLE[r].label));
+  return {el:h('div',{class:'prio',style:'flex-wrap:wrap'},pills), value:()=>role};
+}
 function fillSettings(){
   if (!isOwner()){ slots.people.replaceChildren(); return; }
   if (!slots.people._built){
     slots.people._built = true;
     slots.memberList = h('div',{class:'list'});
     const email = h('input',{id:'new-member',type:'email',autocomplete:'off',placeholder:'name@company.com','aria-label':'Email'});
-    let role = 'maintenance';
-    const pills = [['maintenance','Maintenance','var(--fix)'],['owner','Owner','var(--v7)']].map(([r,label,c])=>
-      h('button',{type:'button',class:'pill',style:'--c:'+c,'aria-pressed':String(r===role),onclick:()=>{ role=r; pills.forEach((b,k)=>b.setAttribute('aria-pressed',String(['maintenance','owner'][k]===r))); }}, h('i'), label));
+    const name = h('input',{id:'new-member-name',autocomplete:'off',placeholder:'Name','aria-label':'Name'});
+    const venues = venueChips([]); venues.hidden = true;
+    const roles = rolePills('maintenance', r=>{ venues.hidden = r!=='manager'; });
     const add = h('button',{class:'go',style:'margin-left:auto',onclick:async()=>{
       const e = email.value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){ toast('Enter an email address.'); return; }
-      if (await insertRow('members',{email:e, role})){ email.value=''; toast('Added. They can now create their account.'); }
+      const row = {email:e, name:name.value.trim()||null, role:roles.value(), venue_ids: roles.value()==='manager'? venues.value() : []};
+      if (await insertRow('members', row)){ email.value=''; name.value=''; venues.reset(); loadTeam(); toast('Added. They can now create their account.'); }
     }},'Add');
     slots.people.append(h('div',{class:'sec'}, h('h2',{},'People')), slots.memberList,
-      h('div',{class:'list'}, h('div',{class:'add-member'}, email, h('div',{class:'add-bar'}, h('div',{class:'prio'},pills), add))),
-      h('p',{class:'date',style:'margin:0'},'Maintenance accounts only see Maintenance. Owners see everything.'));
+      h('div',{class:'list'}, h('div',{class:'add-member'}, email, name, roles.el, venues, add)),
+      h('p',{class:'date',style:'margin:0'},'Maintenance: jobs, can finish them. Manager: jobs and comments for their venues, cannot finish. Owner: everything.'));
   }
-  const ms = [...S.members].sort((a,b)=>a.role.localeCompare(b.role)||a.email.localeCompare(b.email));
-  slots.memberList.replaceChildren(...ms.map(m=>h('div',{class:'member'},
-    h('span',{class:'em'}, m.email),
-    h('span',{class:'role',style:'--c:'+(m.role==='owner'?'var(--v7)':'var(--fix)')}, m.role==='owner'?'Owner':'Maintenance'),
-    m.email===S.email? null : h('button',{class:'icon-btn','aria-label':'Remove '+m.email,style:'background:transparent;border:0;color:var(--muted)',onclick:()=>removeMember(m)},'×'))));
+  const ms = [...S.members].sort((a,b)=>a.role.localeCompare(b.role)||(a.name||a.email).localeCompare(b.name||b.email));
+  slots.memberList.replaceChildren(...ms.map(m=>h('div',{class:'member',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>memberSheet(m)},
+    h('span',{class:'em'}, h('b',{},m.name||m.email.split('@')[0]), h('small',{class:'date',style:'display:block'}, m.email +
+      (m.role==='manager' && m.venue_ids?.length? ' · '+m.venue_ids.map(venueName).join(', ') : ''))),
+    h('span',{class:'role',style:'--c:'+ROLE[m.role].c}, ROLE[m.role].label))));
 }
-async function removeMember(m){
-  const {error} = await S.sb.from('members').delete().eq('email', m.email);
-  if (error) toast(errText(error)); else { toast('Removed'); load('members'); }
+function memberSheet(m){
+  const name = h('input',{id:'m-name',autocomplete:'off'}); name.value = m.name||'';
+  const venues = venueChips(m.venue_ids||[]); venues.hidden = m.role!=='manager';
+  const roles = rolePills(m.role, r=>{ venues.hidden = r!=='manager'; });
+  const self = m.email===S.email;
+  sheet(m.email, [field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Venues'), venues)],
+    async ()=>{
+      const patch = {name:name.value.trim()||null, role: self? m.role : roles.value(), venue_ids: (self? m.role : roles.value())==='manager'? venues.value() : []};
+      const {error} = await S.sb.from('members').update(patch).eq('email', m.email);
+      if (error){ toast(errText(error)); return false; }
+      load('members'); loadTeam(); return true;
+    },
+    self? null : async ()=>{
+      const {error} = await S.sb.from('members').delete().eq('email', m.email);
+      if (error){ toast(errText(error)); return false; }
+      toast('Removed'); load('members'); loadTeam(); return true;
+    });
+}
+
+/* ---------- details & comments ---------- */
+function fillDetail(kind, id){
+  const it = (kind==='job'? S.jobs : S.notes).find(x=>x.id===id);
+  if (!it){
+    slots.detailTools.replaceChildren(); slots.thread.replaceChildren();
+    slots.detail.replaceChildren(h('div',{class:'empty'},'This item no longer exists.'));
+    return;
+  }
+  const P = PRIO[it.priority||2];
+  slots.detailTools.replaceChildren(h('button',{class:'icon-btn','aria-label':'Edit',html:I.edit,onclick:()=> kind==='job'? jobSheet(it) : itemSheet(it)}));
+  const meta = [['Where', venueTags(it)], ['Priority', h('span',{class:'chip',style:'--c:'+P.c},h('i'),P.label)]];
+  if (it.due) meta.push(['Due', dueChip(it)]);
+  meta.push(['Added', (it.createdBy? nameOf(it.createdBy)+' · ' : '')+when(it.createdAt)]);
+  if (it.done) meta.push(['Done', (it.doneBy? nameOf(it.doneBy)+' · ' : '')+when(it.doneAt)]);
+  if (it.deleted) meta.push(['Deleted', when(it.deletedAt)]);
+  const mayClose = kind==='note' || canClose();
+  let action = null;
+  if (mayClose){
+    if (it.done || it.deleted) action = h('button',{class:'btn',onclick:()=> kind==='job'? jobRestore(it) : restore(it)},'Restore');
+    else action = h('button',{class:'btn primary',style:'margin-left:0',onclick:()=> kind==='job'? jobDone(it) : markDone(it),html:I.tick+'<span>Mark done</span>'});
+  }
+  slots.detail.replaceChildren(
+    h('div',{class:'dcard',style:'--c:'+P.c},
+      it.text? h('p',{class:'dtext'},linkify(it.text)) : null,
+      thumbs(it.photos),
+      h('dl',{class:'dmeta'}, meta.map(([k,v])=>[h('dt',{},k), h('dd',{},v)]))),
+    action);
+  const cs = commentsFor(kind,id);
+  slots.thread.replaceChildren(...(cs.length? cs.map(commentRow) : [h('div',{class:'empty'},'No comments yet.')]));
+  markReadFor(kind,id);
+}
+function commentRow(c){
+  const mine = c.author===S.email;
+  let armed = false;
+  const del = (mine || isOwner()) ? h('button',{class:'link',style:'color:var(--muted);font-size:12px',onclick:async()=>{
+    if (!armed){ armed = true; del.textContent = 'Delete?'; del.style.color = 'var(--now)'; return; }
+    await deleteRow('comments', c.id);
+  }},'Delete') : null;
+  return h('div',{class:'cmt'+(mine?' mine':'')},
+    h('div',{class:'cmeta'}, h('b',{},nameOf(c.author)), h('span',{},when(c.created_at)), del),
+    c.body? h('p',{},linkify(c.body)) : null, thumbs(c.attachments));
+}
+function commentForm(kind, id){
+  const c = composer('Write a comment…','cmt-'+id, kind==='job'? 'jobs' : 'notes');
+  c.btn.textContent = 'Send';
+  c.more.append(c.pics.strip, c.pics.input, h('div',{class:'add-bar'}, c.pics.button, c.btn));
+  bindSubmit(c, async ()=>{
+    const body = c.ta.value.trim(), attachments = c.pics.value();
+    if (!body && !attachments.length) return;
+    c.ta.value=''; c.grow();
+    const row = {id:newId(), [kind==='job'?'job_id':'note_id']:id, body, attachments, author:S.email, created_at:new Date().toISOString()};
+    if (!await insertRow('comments', row)){ c.ta.value=body; c.grow(); return; }
+    c.pics.reset(); c.grow();
+  });
+  return c.form;
+}
+async function markReadFor(kind, id){
+  const key = kind==='job'? 'job_id' : 'note_id';
+  const ids = S.inbox.filter(n=>!n.read_at && n[key]===id).map(n=>n.id);
+  if (!ids.length) return;
+  const now = new Date().toISOString();
+  S.inbox = S.inbox.map(n=>ids.includes(n.id)? {...n, read_at:now} : n);
+  await S.sb.from('inbox').update({read_at:now}).in('id', ids);
+  saveCache();
+}
+async function markAllRead(){
+  const now = new Date().toISOString();
+  S.inbox = S.inbox.map(n=>n.read_at? n : {...n, read_at:now}); render();
+  await S.sb.from('inbox').update({read_at:now}).is('read_at', null);
+  saveCache();
+}
+function fillInbox(){
+  if (!S.inbox.length){ slots.list.replaceChildren(h('div',{class:'empty'},'Nothing yet. Comments and job updates for you show up here.')); return; }
+  slots.list.replaceChildren(...S.inbox.map(n=>{
+    const item = n.job_id? S.jobs.find(j=>j.id===n.job_id) : S.notes.find(x=>x.id===n.note_id);
+    const what = n.kind==='comment'? nameOf(n.actor)+' commented' : n.kind==='new_job'? 'New job from '+nameOf(n.actor) : nameOf(n.actor)+' finished a job';
+    const icon = n.kind==='comment'? I.chat : n.kind==='new_job'? I.wrench : I.tick;
+    const title = item?.text || n.preview || '';
+    return h('button',{class:'inrow'+(n.read_at?'':' unread'),onclick:()=>go((n.job_id?'job-'+n.job_id:'note-'+n.note_id))},
+      h('span',{class:'ic',html:icon}),
+      h('span',{class:'tx'}, h('b',{},what), title? h('span',{class:'pv'}, title) : null,
+        n.kind==='comment' && n.preview && n.preview!==title? h('span',{class:'pv q'},'"'+n.preview+'"') : null),
+      h('span',{class:'date'}, when(n.created_at)));
+  }));
 }
 
 /* ---------- rows ---------- */
+const commentBadge = (kind,id) => { const n = commentsFor(kind,id).length; return n? h('span',{class:'cbadge',html:I.chat+n}) : null; };
 function itemRow(i){
+  const open = () => go('note-'+i.id);
   return h('div',{class:'it',style:'--c:'+PRIO[i.priority||2].c},
     h('button',{class:'check','aria-label':'Mark as done',html:I.tick,onclick:()=>markDone(i)}),
-    h('div',{class:'txt',role:'button',tabindex:'0',onclick:()=>itemSheet(i),onkeydown:e=>{ if(e.key==='Enter') itemSheet(i); }},
+    h('div',{class:'txt',role:'button',tabindex:'0',onclick:open,onkeydown:e=>{ if(e.key==='Enter') open(); }},
       i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
-    h('span',{class:'meta'}, age(i.createdAt)));
+    h('span',{class:'meta'}, commentBadge('note',i.id), age(i.createdAt)));
 }
 function jobRow(j, showVenue){
-  return h('div',{class:'it',style:'--c:'+JPRIO[j.priority||2].c},
-    h('button',{class:'check','aria-label':'Mark job done',html:I.tick,onclick:()=>jobDone(j)}),
-    h('div',{class:'txt',role:'button',tabindex:'0',onclick:()=>jobSheet(j),onkeydown:e=>{ if(e.key==='Enter') jobSheet(j); }},
+  const open = () => go('job-'+j.id);
+  return h('div',{class:'it'+(canClose()?'':' nocheck'),style:'--c:'+JPRIO[j.priority||2].c},
+    canClose()? h('button',{class:'check','aria-label':'Mark job done',html:I.tick,onclick:()=>jobDone(j)}) : null,
+    h('div',{class:'txt',role:'button',tabindex:'0',onclick:open,onkeydown:e=>{ if(e.key==='Enter') open(); }},
       showVenue? venueTags(j) : null, j.text? h('span',{},linkify(j.text)) : null, thumbs(j.photos)),
-    h('span',{class:'meta'}, dueChip(j) || age(j.createdAt)));
+    h('span',{class:'meta'}, commentBadge('job',j.id), dueChip(j) || age(j.createdAt)));
 }
 function closedJobRow(j){
   return h('div',{class:'row-a'},
-    h('div',{class:'txt'}, h('span',{class:'date'}, venueTag(j)+' · '+shortDate(j.deletedAt||j.doneAt), j.deleted? [' · ', h('span',{class:'tag-del'},'Deleted')] : null),
+    h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('job-'+j.id)}, h('span',{class:'date'}, venueTag(j)+' · '+shortDate(j.deletedAt||j.doneAt),
+        j.deleted? [' · ', h('span',{class:'tag-del'},'Deleted')] : (isOwner() && j.doneBy? ' · Done by '+nameOf(j.doneBy) : null)),
       j.text? h('span',{},linkify(j.text)) : null, thumbs(j.photos)),
     h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore'));
 }
 function nowCard(i){
   const first = liveVids(i)[0];
   return h('div',{class:'nowcard',role:'button',tabindex:'0',style:'--c:'+(first? vColor(first) : 'var(--muted)'),
-      onclick:()=>itemSheet(i), onkeydown:e=>{ if(e.key==='Enter') itemSheet(i); }},
+      onclick:()=>go('note-'+i.id), onkeydown:e=>{ if(e.key==='Enter') go('note-'+i.id); }},
     venueTags(i),
     h('p',{}, i.text || 'Photo'),
     h('div',{class:'foot'}, h('span',{class:'meta'}, age(i.createdAt)),
       h('button',{class:'check',style:'--c:'+PRIO[i.priority||2].c,'aria-label':'Mark as done',html:I.tick,onclick:e=>{ e.stopPropagation(); markDone(i); }})));
 }
-function archiveRow(i, when){
+function archiveRow(i, at){
   return h('div',{class:'row-a'},
-    h('div',{class:'txt'}, h('span',{class:'date'},venueTag(i)+' · '+shortDate(when)), i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
+    h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('note-'+i.id)}, h('span',{class:'date'},venueTag(i)+' · '+shortDate(at)), i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
     h('button',{class:'restore',onclick:()=>restore(i)},'Restore'));
 }
 function infoRow(n){
@@ -521,6 +684,7 @@ function linkify(text){
   out.push(text.slice(last));
   return out;
 }
+const MAX_VIDEO = 50*1024*1024;   // Supabase free plan: 50 MB per file
 const photoCache = new Map();
 function photoSrc(path){
   if (!photoCache.has(path)) photoCache.set(path, S.sb.storage.from('photos').createSignedUrl(path, 60*60*24)
@@ -532,12 +696,19 @@ function photoImg(path){
   photoSrc(path).then(src=>{ if (src) img.src = src; else img.classList.add('missing'); });
   return img;
 }
+const mediaThumb = p => isVideo(p) ? h('span',{class:'vid',html:I.play}) : photoImg(p);
 function thumbs(paths){
   if (!paths?.length) return null;
-  return h('div',{class:'thumbs'}, paths.map(p=>h('button',{class:'thumb','aria-label':'Open photo',onclick:e=>{ e.stopPropagation(); viewPhoto(p); }}, photoImg(p))));
+  return h('div',{class:'thumbs'}, paths.map(p=>h('button',{class:'thumb','aria-label':isVideo(p)?'Play video':'Open photo',onclick:e=>{ e.stopPropagation(); viewPhoto(p); }}, mediaThumb(p))));
 }
 function viewPhoto(path){
-  const v = h('div',{class:'viewer',role:'dialog','aria-label':'Photo',onclick:()=>v.remove()}, photoImg(path));
+  let media;
+  if (isVideo(path)){
+    media = h('video',{controls:true,playsinline:true,autoplay:true});
+    photoSrc(path).then(src=>{ if (src) media.src = src; });
+  } else media = photoImg(path);
+  const v = h('div',{class:'viewer',role:'dialog','aria-label':isVideo(path)?'Video':'Photo',onclick:e=>{ if (e.target===v) v.remove(); }}, media,
+    h('button',{class:'icon-btn close','aria-label':'Close',onclick:()=>v.remove()},'×'));
   document.body.append(v);
 }
 async function shrink(file){
@@ -549,11 +720,11 @@ async function shrink(file){
   c.getContext('2d').drawImage(src,0,0,c.width,c.height);
   return new Promise(res=>c.toBlob(res,'image/jpeg',0.82));
 }
-async function uploadPhoto(blob, folder){
-  const path = folder+'/'+newId()+'.jpg';
-  const {error} = await S.sb.storage.from('photos').upload(path, blob, {contentType:'image/jpeg'});
+async function uploadPhoto(blob, folder, ext='jpg', type='image/jpeg'){
+  const path = folder+'/'+newId()+'.'+ext;
+  const {error} = await S.sb.storage.from('photos').upload(path, blob, {contentType:type});
   if (error) throw error;
-  photoCache.set(path, Promise.resolve(URL.createObjectURL(blob)));
+  photoCache.set(path, Promise.resolve(URL.createObjectURL(blob)));   // show it straight away without downloading it again
   return path;
 }
 function dropPhotos(paths){ if (paths.length) S.sb.storage.from('photos').remove(paths); }
@@ -561,22 +732,28 @@ function photoPicker(initial, folder){
   let paths = [...initial], pending = 0;
   const picker = {removed:[], onchange:null, busy:()=>pending>0};
   const strip = h('div',{class:'thumbs'});
-  const input = h('input',{type:'file',accept:'image/*',multiple:true,hidden:true});
-  const draw = () => strip.replaceChildren(...paths.map(p=>h('div',{class:'thumb'}, photoImg(p),
+  const input = h('input',{type:'file',accept:'image/*,video/*',multiple:true,hidden:true});
+  const draw = () => strip.replaceChildren(...paths.map(p=>h('div',{class:'thumb'}, mediaThumb(p),
     h('button',{type:'button',class:'x','aria-label':'Remove photo',onclick:()=>{ paths = paths.filter(x=>x!==p); picker.removed.push(p); draw(); picker.onchange?.(); }},'×'))));
   input.addEventListener('change', async ()=>{
     const files = [...input.files]; input.value = '';
     pending += files.length;
     for (const f of files){
       strip.append(h('div',{class:'thumb busy'}));
-      try { paths.push(await uploadPhoto(await shrink(f), folder)); }
-      catch { toast(navigator.onLine? 'That photo could not be added.' : 'No connection. Add the photo when you have signal.'); }
+      try {
+        if (f.type.startsWith('video/')){
+          if (f.size > MAX_VIDEO){ toast('Video too long (max 50 MB, about 1 minute). Record a shorter clip.'); throw 0; }
+          const ext = f.type==='video/quicktime'? 'mov' : f.type==='video/webm'? 'webm' : 'mp4';
+          paths.push(await uploadPhoto(f, folder, ext, f.type||'video/mp4'));
+        } else paths.push(await uploadPhoto(await shrink(f), folder));
+      }
+      catch (e) { if (e!==0) toast(navigator.onLine? 'That file could not be added.' : 'No connection. Add it when you have signal.'); }
       pending--; draw(); picker.onchange?.();
     }
   });
   draw();
   return Object.assign(picker, {strip, input,
-    button: h('button',{type:'button',class:'pill tool','aria-label':'Add photo',title:'Add photo',html:I.camera,onclick:()=>input.click()}),
+    button: h('button',{type:'button',class:'pill tool','aria-label':'Add photo or video',title:'Photo or video',html:I.camera,onclick:()=>input.click()}),
     value: () => paths, reset: () => { paths = []; picker.removed = []; draw(); }});
 }
 
@@ -642,7 +819,7 @@ function jobSheet(j){
     const ok = await updateRow('jobs', j.id, {text,photos,priority:prio.value(),due:due.value(),...where.value()});
     if (ok) dropPhotos(pics.removed);
     return ok;
-  }, ()=>jobDelete(j));
+  }, canClose()? ()=>jobDelete(j) : null);
 }
 
 function venueSheet(v){
@@ -776,19 +953,20 @@ async function start(){
   const {data, error} = await S.sb.from('members').select('role').eq('email', S.email).maybeSingle();
   if (error){ if (!S.ready) app.replaceChildren(h('p',{class:'status'},'No connection. Open again when you have signal.')); return; }
   if (!data){ notMemberScreen(); return; }
+  if (S.role && S.role!==data.role) shellKey = null;
   S.role = data.role; S.ready = true;
-  await Promise.all(tablesForRole().map(load));
+  await Promise.all([...tablesForRole().map(load), loadTeam()]);
   render(true);
   channel?.unsubscribe();
   channel = S.sb.channel('ops');
-  for (const t of tablesForRole()) channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>reloadSoon(t));
+  for (const t of tablesForRole()) channel.on('postgres_changes',{event:'*',schema:'public',table:t},()=>{ reloadSoon(t); if (t==='members') loadTeam(); });
   channel.subscribe();
 }
 function offlineBadge(){
   document.querySelector('.offline')?.remove();
   if (!navigator.onLine) document.body.append(h('div',{class:'offline'},'Offline'));
 }
-addEventListener('online',()=>{ offlineBadge(); if (S.ready) tablesForRole().forEach(load); });
+addEventListener('online',()=>{ offlineBadge(); if (S.ready){ tablesForRole().forEach(load); loadTeam(); } });
 addEventListener('offline',offlineBadge);
 document.addEventListener('visibilitychange',()=>{ if (!document.hidden && S.ready && navigator.onLine) tablesForRole().forEach(load); });
 
