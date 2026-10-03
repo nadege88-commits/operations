@@ -19,6 +19,8 @@ const I = {
   play:'<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>',
   send:'<svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-2-6z"/></svg>',
   attach:'<svg viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 17.5a2 2 0 0 1-3-3l7.5-7.5"/></svg>',
+  sun:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon:'<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
 };
 // Notes and jobs share High / Medium / Low.
@@ -84,6 +86,18 @@ function toast(msg, undo){
   document.body.append(t);
   setTimeout(()=>t.remove(), undo? 5000 : 2600);
 }
+
+/* ---------- light / dark (per phone, dark by default) ---------- */
+const THEME_KEY = 'ops-theme';
+const getTheme = () => { try { return localStorage.getItem(THEME_KEY)==='light' ? 'light' : 'dark'; } catch { return 'dark'; } };
+function setTheme(t){
+  try { localStorage.setItem(THEME_KEY, t); } catch {}
+  document.documentElement.dataset.theme = t;
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', t==='light'? '#F3F4F8' : '#0D0F16');
+  render(true);
+}
+const themeBtn = () => h('button',{class:'icon-btn','aria-label':getTheme()==='dark'? 'Switch to light mode' : 'Switch to dark mode',
+  html:getTheme()==='dark'? I.sun : I.moon, onclick:()=>setTheme(getTheme()==='dark'? 'light' : 'dark')});
 
 /* ---------- data: Supabase rows <-> app objects ---------- */
 const COLS = {venueIds:'venue_ids', doneAt:'done_at', deletedAt:'deleted_at', createdAt:'created_at', all:'all_venues', order:'ord', createdBy:'created_by', doneBy:'done_by'};
@@ -211,7 +225,7 @@ function buildShell(r){
     slots.hero = h('div',{class:'hero'}); slots.now = h('div',{class:'group'});
     slots.shortcuts = h('div',{class:'shortcuts'}); slots.venues = h('div',{class:'grid'});
     app.append(
-      h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), bell(), gear()),
+      h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), themeBtn(), bell(), gear()),
       slots.maint, h('div',{class:'mili-head'}, h('h2',{},'Mili')), slots.hero, slots.now, slots.shortcuts,
       h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{},'Venues'), h('button',{onclick:()=>venueSheet(null)},'+ Add')), slots.venues));
   } else if (r.name==='venue'){
@@ -220,7 +234,7 @@ function buildShell(r){
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'group',style:'gap:14px'});
-    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), isOwner()? null : bell(), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
+    app.append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), jobForm(), slots.tabs, slots.list);
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
@@ -251,7 +265,9 @@ function buildShell(r){
     app.append(h('div',{class:'top'}, back(), h('h1',{},'Settings')),
       h('div',{class:'list'},
         h('div',{class:'add-member'}, h('label',{for:'my-name',class:'date'},'Your name'), h('div',{class:'add-bar',style:'flex-wrap:nowrap'}, myName, h('button',{class:'go',onclick:saveName},'Save'))),
-        h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+ROLE[S.role].c}, ROLE[S.role].label))),
+        h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+ROLE[S.role].c}, ROLE[S.role].label)),
+        h('div',{class:'member'}, h('span',{class:'em'},'Appearance'), h('div',{class:'theme-pick'},
+          ...[['dark','Dark'],['light','Light']].map(([t,l])=>h('button',{class:'pill',style:'--c:var(--accent)','aria-pressed':String(getTheme()===t),onclick:()=>setTheme(t)}, l))))),
       slots.people,
       h('div',{class:'list'},
         isOwner()? h('button',{class:'add-row',onclick:importSheet},'Import from the old board') : null,
@@ -327,7 +343,7 @@ function fillVenue(id){
       h('button',{class:'round','aria-label':'Back',onclick:goBack,html:I.back}),
       h('button',{class:'round','aria-label':'Rename venue',onclick:()=>venueSheet(v),html:I.edit})),
     h('h1',{},v.name),
-    h('div',{class:'n'}, vn? h('span',{class:'pw red'},vn+' now') : null, h('span',{class:'pw'},vo.length+' open'), vj.length? h('span',{class:'pw'},vj.length+(vj.length>1?' jobs':' job')) : null));
+    h('div',{class:'n'}, vn? h('span',{class:'pw red'},vn+' high') : null, h('span',{class:'pw'},vo.length+' open'), vj.length? h('span',{class:'pw'},vj.length+(vj.length>1?' jobs':' job')) : null));
   slots.open.replaceChildren(...(vo.length? vo.map(i=>itemRow(i)) : [h('div',{class:'empty'},'Nothing open here.')]));
   slots.vjobs.replaceChildren(...(vj.length? [h('div',{class:'sub-h',html:I.wrench+'<span>Maintenance</span>'}), h('div',{class:'items'}, vj.map(j=>jobRow(j,false)))] : []));
 }
@@ -971,6 +987,7 @@ addEventListener('offline',offlineBadge);
 document.addEventListener('visibilitychange',()=>{ if (!document.hidden && S.ready && navigator.onLine) tablesForRole().forEach(load); });
 
 (function boot(){
+  document.documentElement.dataset.theme = getTheme();
   const cfg = window.OPS_CONFIG||{};
   if (!window.supabase || !cfg.supabaseUrl || cfg.supabaseUrl==='SUPABASE_URL'){
     app.replaceChildren(h('p',{class:'status'},'Setup not finished: the database link is missing.'));
