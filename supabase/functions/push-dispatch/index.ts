@@ -1,7 +1,7 @@
 // Sends push notifications from the inbox, following the house rules so they never get noisy:
 //  - push only for comments (to everyone involved) and new jobs (to maintenance); "job finished" stays in the inbox
 //  - at most one push per person every 10 minutes; anything in between is bundled ("3 updates")
-//  - quiet hours 21:00–08:00 Malta time; what arrives overnight is bundled into one push after 08:00
+//  - no quiet hours: the team also works night shifts
 //  - one 08:00 reminder for maintenance, only when something is due today or late
 //  - each person can switch pushes off in Settings
 // Called by a timer (pg_cron) with a shared secret; never by phones.
@@ -41,12 +41,10 @@ async function sendTo(email: string, payload: Record<string, unknown>) {
   return sent;
 }
 
-// Test project only (ALLOW_TEST_FORCE=1): lets a test run ignore the clock. Never set on the live project.
+// Test project only (ALLOW_TEST_FORCE=1): lets a test run send the morning reminder at any hour. Never set on live.
 const canForce = Deno.env.get("ALLOW_TEST_FORCE") === "1";
 
-async function dispatch(force = false) {
-  const hour = localHour();
-  if ((hour >= 21 || hour < 8) && !(force && canForce)) return { quiet: true };
+async function dispatch() {
 
   const { data: members } = await sb.from("members").select("email,role,name,push_enabled,last_push_at");
   const { data: rows } = await sb.from("inbox").select("id,recipient,kind,job_id,note_id,actor,preview,created_at").is("pushed_at", null).order("id");
@@ -85,7 +83,7 @@ async function dispatch(force = false) {
       const parts = [c ? `${c} comment${c > 1 ? "s" : ""}` : "", j ? `${j} new job${j > 1 ? "s" : ""}` : ""].filter(Boolean);
       payload = { title: `${items!.length} updates`, body: parts.join(", "), url: "#inbox" };
     }
-    await sendTo(email, { ...payload, tag: "ops" });
+    await sendTo(email, payload);
     await sb.from("inbox").update({ pushed_at: new Date().toISOString() }).in("id", items!.map((r) => r.id));
     await sb.from("members").update({ last_push_at: new Date().toISOString() }).eq("email", email);
     pushed++;
@@ -111,6 +109,6 @@ async function morning(force = false) {
 Deno.serve(async (req) => {
   if (req.headers.get("x-cron-secret") !== Deno.env.get("CRON_SECRET")) return new Response("Forbidden", { status: 403 });
   const { mode, force } = await req.json().catch(() => ({ mode: "dispatch", force: false }));
-  const result = mode === "morning" ? await morning(!!force) : await dispatch(!!force);
+  const result = mode === "morning" ? await morning(!!force) : await dispatch();
   return Response.json(result);
 });

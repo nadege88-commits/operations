@@ -598,7 +598,7 @@ async function fillPushAsk(){
   const dismiss = () => { try { localStorage.setItem(ASK_KEY,'1'); } catch {} box.replaceChildren(); };
   box.replaceChildren(h('div',{class:'ask'},
     h('span',{class:'ic',html:I.bell}),
-    h('span',{class:'tx'}, h('b',{},'Turn on notifications?'), h('small',{}, isOwner()||S.role==='manager' ? 'Hear about new comments. Never at night.' : 'Hear about new jobs and comments. Never at night.')),
+    h('span',{class:'tx'}, h('b',{},'Turn on notifications?'), h('small',{}, isOwner()||S.role==='manager' ? 'Hear about new comments on your jobs.' : 'Hear about new jobs and comments.')),
     h('div',{class:'ask-actions'},
       h('button',{class:'go',onclick:async()=>{ dismiss(); await turnOnPush(); }},'Turn on'),
       h('button',{class:'link',style:'color:var(--muted)',onclick:dismiss},'Not now'))));
@@ -608,7 +608,7 @@ async function fillNotifications(){
   const st = await pushStatus();
   const text = {install:'To get notifications on iPhone, add Operations to your Home Screen (Share → Add to Home Screen) and open it from there.',
     unsupported:'This browser cannot show notifications.', blocked:'Notifications are blocked. Allow them for Operations in your phone settings.',
-    on:'On. You get new comments and, for maintenance, new jobs. Never between 21:00 and 08:00.', off:'Off. Turn on to hear about new comments on your jobs.'}[st];
+    on:'On. You get new comments and, for maintenance, new jobs.', off:'Off. Turn on to hear about new comments on your jobs.'}[st];
   box.replaceChildren(h('div',{class:'member'}, h('span',{class:'em'}, h('b',{},'Notifications'), h('small',{class:'date',style:'display:block'}, text)),
     st==='on'? h('button',{class:'pill',style:'--c:var(--accent)',onclick:turnOffPush},'Turn off')
     : st==='off'? h('button',{class:'pill',style:'--c:var(--accent)','aria-pressed':'true',onclick:turnOnPush},'Turn on') : null));
