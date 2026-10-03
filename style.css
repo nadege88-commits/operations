@@ -297,3 +297,7 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .venue.calm .vlogo{opacity:.7}
 :root[data-theme="light"] .venue .vlogo{filter:brightness(0)}
 :root[data-theme="light"] .venue.calm .vlogo{opacity:.6}
+/* centred logo cards */
+.venue:has(.vlogo){align-items:center;text-align:center}
+.venue .vlogo{object-position:center;margin-inline:auto}
+.venue:has(.vlogo) .n{justify-content:center}
