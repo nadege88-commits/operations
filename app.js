@@ -31,7 +31,7 @@ const PRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'}
 const JPRIO = PRIO;
 
 const S = {sb:null, session:null, email:'', role:null, pushEnabled:true, venues:[], notes:[], jobs:[], essentials:[], members:[], team:[], comments:[], inbox:[],
-  archiveTab:'done', archiveQ:'', jobTab:'open', online:navigator.onLine, ready:false, depth:0};
+  archiveTab:'done', archiveQ:'', jobTab:'open', areaTab:'open', online:navigator.onLine, ready:false, depth:0};
 let shellKey = null;
 
 function h(tag, attrs, ...kids){
@@ -283,7 +283,8 @@ function buildShell(r){
       h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{}, S.role==='manager'? 'My areas' : 'Areas'), isOwner()? h('button',{onclick:()=>venueSheet(null)},'+ Add') : null), slots.venues));
   } else if (r.name==='venue'){
     slots.head = h('div',{class:'vhead'}); slots.open = h('div',{class:'items'}); slots.vjobs = h('div',{class:'group'});
-    append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
+    slots.tabs = h('div',{class:'seg',role:'tablist'});
+    append(slots.head, noteForm(r.id), slots.tabs, slots.open, slots.vjobs);
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'group',style:'gap:26px'});
@@ -417,8 +418,29 @@ function fillVenue(id){
       isOwner()? h('button',{class:'round','aria-label':'Rename area',onclick:()=>venueSheet(v),html:I.edit}) : h('span',{})),
     h('h1',{},v.name),
     h('div',{class:'n'}, vn? h('span',{class:'pw red'},vn+' high') : null, h('span',{class:'pw'},vo.length+' open'), vj.length? h('span',{class:'pw'},vj.length+(vj.length>1?' jobs':' job')) : null));
+  // Open / Done, like Maintenance: Done lists this area's finished tasks and jobs, newest first, with who finished them.
+  const doneNotes = S.notes.filter(i=>i.done && !i.deleted && vids(i).includes(id));
+  const doneJobs = S.jobs.filter(j=>j.done && !j.deleted && vids(j).includes(id));
+  const tab = S.areaTab;
+  slots.tabs.replaceChildren(...[['open','Open · '+(vo.length+vj.length)],['done','Done · '+(doneNotes.length+doneJobs.length)]].map(([t,label])=>
+    h('button',{role:'tab','aria-selected':String(t===tab),onclick:()=>{S.areaTab=t; render();}},label)));
+  if (tab==='done'){
+    const done = [...doneNotes.map(i=>({i,kind:'note'})), ...doneJobs.map(i=>({i,kind:'job'}))].sort((a,b)=>(b.i.doneAt||0)-(a.i.doneAt||0));
+    slots.open.replaceChildren(h('div',{class:'list'}, ...(done.length? done.map(d=>doneRow(d.i,d.kind)) : [h('div',{class:'empty'},'Nothing finished here yet.')])), olderLink());
+    slots.vjobs.replaceChildren();
+    return;
+  }
   slots.open.replaceChildren(...(vo.length? vo.map(i=>itemRow(i)) : [h('div',{class:'empty'},'Nothing open here.')]));
   slots.vjobs.replaceChildren(...(vj.length? [h('div',{class:'sub-h',html:I.wrench+'<span>Maintenance</span>'}), h('div',{class:'items'}, vj.map(j=>jobRow(j,false)))] : []));
+}
+// A finished task or job in an area's Done list: when, who finished it, and Restore for those allowed to finish it.
+function doneRow(i, kind){
+  const job = kind==='job';
+  return h('div',{class:'row-a'},
+    h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go((job?'job-':'note-')+i.id)},
+      h('span',{class:'date'}, job? h('span',{style:'color:var(--fix)'},'Job · ') : null, shortDate(i.doneAt), i.doneBy? ' · Done by '+nameOf(i.doneBy) : null),
+      i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
+    (job? canClose() : canFinishNote(i))? h('div',{class:'row-actions'}, h('button',{class:'restore',onclick:()=>job? jobRestore(i) : restore(i)},'Restore')) : null);
 }
 
 function fillMaintenance(){
