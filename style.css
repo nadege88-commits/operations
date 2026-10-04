@@ -317,3 +317,8 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .who{font-size:12px;font-weight:700;color:var(--v3);white-space:nowrap}
 .assign{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
 .assign .date{margin-right:2px}
+/* delete-for-good (owners, Deleted items) */
+.row-actions{display:flex;align-items:center;gap:8px;flex:none}
+.purge{height:32px;min-width:32px;padding:0 8px;border-radius:999px;border:1.5px solid var(--line);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700}
+.purge svg{width:16px;height:16px}
+.purge.armed{background:var(--now);border-color:var(--now);color:#fff}
