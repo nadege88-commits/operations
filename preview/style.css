@@ -313,5 +313,9 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .ask .tx small{color:var(--muted);font-size:13px}
 .ask-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
 .ask-actions .go{margin-left:0}
+/* tasks: who a task is for, and the assign-to picker */
+.who{font-size:12px;font-weight:700;color:var(--v3);white-space:nowrap}
+.assign{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.assign .date{margin-right:2px}
 
 .testbadge{position:fixed;left:50%;bottom:calc(6px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#FF9A52;color:#0D0F16;font-size:11px;font-weight:800;letter-spacing:.1em;padding:3px 10px;border-radius:999px;z-index:40;pointer-events:none}
