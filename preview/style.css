@@ -5,7 +5,7 @@
   --bg:#0D0F16; --surface:#161925; --raised:#1D2130; --ink:#F2F3F9; --muted:#8A90A8; --line:#242838;
   --accent:#6E8BFF; --accent-ink:#0D0F16; --accent-soft:#A9B9FF;
   --now:#FF5F6D; --soon:#FFBE3D; --later:#7F86A0; --fix:#5B9BFF;
-  --v1:#35C3F3; --v2:#4CD964; --v3:#2DD4AE; --v4:#5C86FF; --v5:#EE6BFA; --v6:#9AD63A; --v7:#A47BFF; --v8:#FF8AC4; --v9:#C8A27C;
+  --v1:#FF7A66; --v2:#FFB31F; --v3:#2DD4AE; --v4:#5C86FF; --v5:#FF5C93; --v6:#9AD63A; --v7:#A47BFF; --v8:#FF9A52;
   --font:"Plus Jakarta Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --r:18px;
   color-scheme:dark;
@@ -271,7 +271,7 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
   --bg:#F3F4F8; --surface:#FFFFFF; --raised:#FFFFFF; --ink:#11131A; --muted:#565C70; --line:#DCE0EA;
   --accent:#3552D6; --accent-ink:#FFFFFF; --accent-soft:#2F4BCB;
   --now:#D92D3F; --soon:#B06F00; --later:#6B7289; --fix:#2563D8;
-  --v1:#0E8FBF; --v2:#1E9E48; --v3:#0D967A; --v4:#3A5FE5; --v5:#B334C9; --v6:#5A9411; --v7:#7A4DE8; --v8:#D6409A; --v9:#6B4226;
+  --v1:#E04B33; --v2:#C27F00; --v3:#0D967A; --v4:#3A5FE5; --v5:#D63370; --v6:#5A9411; --v7:#7A4DE8; --v8:#D9661C;
   color-scheme:light;
 }
 :root[data-theme="light"] .hero{background:linear-gradient(160deg,#E4E9FB,#F8F9FE 75%);border-color:#D3DAF2}

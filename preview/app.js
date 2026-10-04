@@ -53,7 +53,7 @@ const venueName = id => (S.venues.find(v=>v.id===id)||{}).name || 'Unknown area'
 const vids = i => i.venueIds || [];
 const liveVids = i => vids(i).filter(id=>S.venues.some(v=>v.id===id));
 const venueTag = i => i.all ? 'All areas' : (liveVids(i).map(venueName).join(' · ') || 'No area');
-const vColor = id => { const v = S.venues.find(x=>x.id===id); return v ? 'var(--v'+((((v.order||1)-1)%9+9)%9+1)+')' : 'var(--muted)'; };
+const vColor = id => { const v = S.venues.find(x=>x.id===id); return v ? 'var(--v'+((((v.order||1)-1)%8+8)%8+1)+')' : 'var(--muted)'; };
 const openNotes = vid => S.notes.filter(i=>!i.done && !i.deleted && (vid==null || vids(i).includes(vid)));
 const openJobs = vid => S.jobs.filter(j=>!j.done && !j.deleted && (vid==null || vids(j).includes(vid)));
 const isOwner = () => S.role==='owner';
