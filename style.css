@@ -213,7 +213,7 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .tag-del{font-size:11px;font-weight:700;color:var(--now)}
 
 /* app shell: sign-in, settings */
-.auth{max-width:380px;margin:12vh auto 0;display:flex;flex-direction:column;gap:14px}
+.auth{max-width:380px;width:100%;margin:12vh auto 0;display:flex;flex-direction:column;gap:14px}
 .auth .logo{width:64px;height:64px;border-radius:16px}
 .auth h1{font-size:30px}
 .auth p{margin:0;color:var(--muted)}
@@ -322,3 +322,8 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .purge{height:32px;min-width:32px;padding:0 8px;border-radius:999px;border:1.5px solid var(--line);color:var(--muted);display:inline-flex;align-items:center;justify-content:center;gap:6px;font-size:13px;font-weight:700}
 .purge svg{width:16px;height:16px}
 .purge.armed{background:var(--now);border-color:var(--now);color:#fff}
+/* password fields: eye button to show or hide what is typed */
+.pwbox{position:relative;flex:1;min-width:0;display:flex}
+.pwbox input{padding-right:48px!important;width:100%}
+.pwbox .eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.pwbox .eye svg{width:20px;height:20px}

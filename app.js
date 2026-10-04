@@ -23,6 +23,8 @@ const I = {
   moon:'<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
   trash:'<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+  eye:'<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/></svg>',
 };
 // Notes and jobs share High / Medium / Low.
 const PRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'},3:{label:'Low',c:'var(--later)'}};
@@ -315,10 +317,20 @@ function buildShell(r){
       const {error} = await S.sb.rpc('set_my_name',{new_name:myName.value});
       if (error) toast(errText(error)); else { toast('Name saved'); loadTeam(); if (isOwner()) load('members'); }
     };
+    const newPass = h('input',{id:'change-password',type:'password',autocomplete:'new-password',placeholder:'New password','aria-label':'New password'});
+    const savePass = async e => {
+      if (newPass.value.length < 6){ toast('The new password needs at least 6 characters'); return; }
+      e.currentTarget.disabled = true; const btn = e.currentTarget;
+      const {error} = await S.sb.auth.updateUser({password:newPass.value});
+      btn.disabled = false;
+      if (error) toast(/different/i.test(error.message) ? 'That is already your password' : errText(error));
+      else { newPass.value = ''; newPass.type = 'password'; toast('Password changed'); }
+    };
     append(h('div',{class:'top'}, back(), h('h1',{},'Settings')),
       h('div',{class:'list'},
         h('div',{class:'add-member'}, h('label',{for:'my-name',class:'date'},'Your name'), h('div',{class:'add-bar',style:'flex-wrap:nowrap'}, myName, h('button',{class:'go',onclick:saveName},'Save'))),
         h('div',{class:'member'}, h('span',{class:'em'}, S.email), h('span',{class:'role',style:'--c:'+ROLE[S.role].c}, ROLE[S.role].label)),
+        h('div',{class:'add-member'}, h('label',{for:'change-password',class:'date'},'Change password'), h('div',{class:'add-bar',style:'flex-wrap:nowrap'}, pwField(newPass), h('button',{class:'go',onclick:savePass},'Save'))),
         (slots.notif = h('div',{})),
         h('div',{class:'member'}, h('span',{class:'em'},'Appearance'), h('div',{class:'theme-pick'},
           ...[['dark','Dark'],['light','Light']].map(([t,l])=>h('button',{class:'pill',style:'--c:var(--accent)','aria-pressed':String(getTheme()===t),onclick:()=>setTheme(t)}, l))))),
@@ -1127,6 +1139,16 @@ function importSheet(){
 }
 
 /* ---------- sign-in ---------- */
+// A password input with an eye button that shows or hides what is typed.
+function pwField(input, shown){
+  const eye = h('button',{type:'button',class:'eye'});
+  const set = on => { input.type = on? 'text' : 'password'; eye.innerHTML = on? I.eyeOff : I.eye;
+    eye.setAttribute('aria-label', on? 'Hide password' : 'Show password'); eye.setAttribute('aria-pressed', String(on)); };
+  eye.onclick = () => { set(input.type==='password'); input.focus(); };
+  input.setAttribute('autocapitalize','off'); input.setAttribute('autocorrect','off'); input.setAttribute('spellcheck','false');
+  set(!!shown);
+  return h('div',{class:'pwbox'}, input, eye);
+}
 function authScreen(mode, note){
   S.ready = false; shellKey = null;
   const email = h('input',{id:'email',type:'email',autocomplete:'email',placeholder:'Email','aria-label':'Email'});
@@ -1146,14 +1168,15 @@ function authScreen(mode, note){
       if (!error && !r.data.session){ busy(false); msg.textContent = 'Check your email to confirm, then sign in here.'; return; }
     } else {
       ({error} = await S.sb.auth.resetPasswordForEmail(em, {redirectTo:location.origin+location.pathname}));
-      if (!error){ busy(false); msg.textContent = 'Reset link sent. Open it on this phone.'; return; }
+      if (!error){ busy(false); msg.textContent = 'Link sent. Open the newest email on this phone and tap the link once.'; return; }
     }
     busy(false);
-    if (error) msg.textContent = /invalid login/i.test(error.message) ? 'Wrong email or password.' : error.message;
+    if (error) msg.textContent = /invalid login/i.test(error.message) ? 'Wrong email or password.'
+      : /rate limit|too many|security purposes/i.test(error.message) ? 'Too many emails sent. Use the newest email, or try again in an hour.' : error.message;
   }},
     h('img',{class:'logo',src:'icons/icon-192.png',alt:''}),
     h('h1',{},'Operations'),
-    email, mode==='reset'? null : pass, submit, msg,
+    email, mode==='reset'? null : pwField(pass, mode==='signup'), submit, msg,
     h('div',{class:'row-links'},
       mode!=='signin'? h('button',{type:'button',class:'link',onclick:()=>authScreen('signin')},'Sign in') : h('button',{type:'button',class:'link',onclick:()=>authScreen('signup')},'Create account'),
       mode!=='reset'? h('button',{type:'button',class:'link',style:'color:var(--muted)',onclick:()=>authScreen('reset')},'Forgot password') : null));
@@ -1162,12 +1185,24 @@ function authScreen(mode, note){
 function newPasswordScreen(){
   S.ready = false; shellKey = null;
   const pass = h('input',{id:'new-password',type:'password',autocomplete:'new-password',placeholder:'New password','aria-label':'New password'});
-  const msg = h('p',{class:'date'});
+  const msg = h('p',{class:'date',style:'min-height:1.4em'});
+  const save = h('button',{type:'submit',class:'btn primary'},'Save');
   app.replaceChildren(h('form',{class:'auth',onsubmit:async e=>{
-    e.preventDefault();
+    e.preventDefault(); msg.textContent = '';
+    if (pass.value.length < 6){ msg.textContent = 'At least 6 characters.'; return; }
+    save.disabled = true;
     const {error} = await S.sb.auth.updateUser({password:pass.value});
-    if (error) msg.textContent = error.message; else { toast('Password changed'); start(); }
-  }}, h('h1',{},'New password'), pass, h('button',{type:'submit',class:'btn primary'},'Save'), msg));
+    save.disabled = false;
+    if (error){ msg.textContent = /different/i.test(error.message) ? 'Pick a password you have not used here before.' : error.message; return; }
+    S.recovering = false;
+    // On iPhone the email link opens Safari, not the home-screen app, so say where to sign in.
+    app.replaceChildren(h('div',{class:'auth'},
+      h('img',{class:'logo',src:'icons/icon-192.png',alt:''}),
+      h('h1',{},'Password saved'),
+      h('p',{},'Open Operations from your home screen and sign in with the new password.'),
+      h('button',{class:'btn primary',onclick:()=>start()},'Continue here')));
+  }}, h('img',{class:'logo',src:'icons/icon-192.png',alt:''}), h('h1',{},'New password'), pwField(pass), save, msg));
+  pass.focus();
 }
 function notMemberScreen(){
   S.ready = false; shellKey = null;
@@ -1187,6 +1222,13 @@ async function signOut(){
 let channel = null;
 async function start(){
   const {data:{session}} = await S.sb.auth.getSession();
+  if (S.recovering && session){ newPasswordScreen(); return; }   // opened from a reset email: new password first
+  S.recovering = false;
+  if (S.linkError){                                              // an old or already used reset link
+    S.linkError = false;
+    if (!session){ authScreen('reset', 'That link has expired (each link works once). Send a new one:'); return; }
+    setTimeout(()=>toast('That reset link has expired. Each link works once.'), 800);
+  }
   if (!session){ authScreen('signin'); return; }
   S.email = (session.user.email||'').toLowerCase();
   if (loadCache(S.email) && S.role){ S.ready = true; render(true); }      // instant open from the last copy
@@ -1215,6 +1257,10 @@ document.addEventListener('visibilitychange',()=>{ if (!document.hidden && S.rea
 (function boot(){
   document.documentElement.dataset.theme = getTheme();
   const cfg = window.OPS_CONFIG||{};
+  // Read the email link before Supabase clears it: a reset link must open the new-password
+  // screen, not the app; a failed link (#error=…) is noted and cleared so it is not read as a page.
+  if (/(^#|&)type=recovery(&|$)/.test(location.hash)) S.recovering = true;
+  else if (/(^#|&)error(_code)?=/.test(location.hash)){ S.linkError = true; history.replaceState(null, '', location.pathname + location.search); }
   if (!window.supabase || !cfg.supabaseUrl || cfg.supabaseUrl==='SUPABASE_URL'){
     app.replaceChildren(h('p',{class:'status'},'Setup not finished: the database link is missing.'));
     return;
@@ -1222,8 +1268,8 @@ document.addEventListener('visibilitychange',()=>{ if (!document.hidden && S.rea
   S.sb = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {auth:{persistSession:true, autoRefreshToken:true, detectSessionInUrl:true}});
   S.sb.auth.onAuthStateChange((event)=>{
     // Defer: awaiting Supabase calls inside this callback can stall the client.
-    if (event==='PASSWORD_RECOVERY') setTimeout(newPasswordScreen,0);
-    else if (event==='SIGNED_IN' && !S.ready) setTimeout(start,0);
+    if (event==='PASSWORD_RECOVERY'){ S.recovering = true; setTimeout(newPasswordScreen,0); }
+    else if (event==='SIGNED_IN' && !S.ready && !S.recovering) setTimeout(start,0);
   });
   offlineBadge();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
