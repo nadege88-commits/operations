@@ -1294,7 +1294,22 @@ document.addEventListener('visibilitychange',()=>{ if (!document.hidden && S.rea
     else if (event==='SIGNED_IN' && !S.ready && !S.recovering) setTimeout(start,0);
   });
   offlineBadge();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+  if ('serviceWorker' in navigator){
+    // Look for a new version whenever the app comes back to the screen, and switch to it once it has installed:
+    // straight away if nothing is being typed, otherwise the next time the app goes to the background.
+    const hadWorker = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      document.addEventListener('visibilitychange',()=>{ if (!document.hidden) reg.update().catch(()=>{}); });
+    }).catch(()=>{});
+    let pending = false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if (!hadWorker || pending) return;
+      pending = true;
+      const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName||'');
+      if (!typing || document.hidden) location.reload();
+      else document.addEventListener('visibilitychange',()=>{ if (document.hidden) location.reload(); });
+    });
+  }
   start();
 })();
 
