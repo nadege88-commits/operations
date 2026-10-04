@@ -21,6 +21,7 @@ const I = {
   attach:'<svg viewBox="0 0 24 24"><path d="M20 11.5l-8 8a5 5 0 0 1-7-7l8.5-8.5a3.5 3.5 0 0 1 5 5L10 17.5a2 2 0 0 1-3-3l7.5-7.5"/></svg>',
   sun:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   moon:'<svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>',
+  trash:'<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
 };
 // Notes and jobs share High / Medium / Low.
@@ -191,6 +192,26 @@ async function jobDelete(j){
   const ok = await updateRow('jobs', j.id, {deleted:true,deletedAt:Date.now()});
   if (ok) toast('Deleted', ()=>updateRow('jobs', j.id, {deleted:false,deletedAt:null}));
   return ok;
+}
+// Owners only: remove a deleted note/task or job for good, with its photos and comments.
+async function purge(kind, it){
+  if (!isOwner()) return;
+  const files = [...(it.photos||[]), ...commentsFor(kind, it.id).flatMap(c=>c.attachments||[])];
+  if (await deleteRow(kind==='job'? 'jobs' : 'notes', it.id)){
+    dropPhotos(files);
+    S.comments = S.comments.filter(c=>(kind==='job'? c.job_id : c.note_id)!==it.id);
+    toast('Deleted for good');
+  }
+}
+// Bin icon: first tap asks, second tap deletes.
+function purgeButton(kind, it){
+  let armed = false;
+  const b = h('button',{class:'purge','aria-label':'Delete for good',title:'Delete for good',html:I.trash,onclick:async e=>{
+    e.stopPropagation();
+    if (!armed){ armed = true; b.classList.add('armed'); b.innerHTML = I.trash+'<span>Delete?</span>'; setTimeout(()=>{ if (b.isConnected && armed){ armed=false; b.classList.remove('armed'); b.innerHTML = I.trash; } }, 4000); return; }
+    await purge(kind, it);
+  }});
+  return b;
 }
 async function jobRestore(j){
   if (!canClose()) return;
@@ -663,7 +684,9 @@ function closedJobRow(j){
     h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('job-'+j.id)}, h('span',{class:'date'}, venueTag(j)+' · '+shortDate(j.deletedAt||j.doneAt),
         j.deleted? [' · ', h('span',{class:'tag-del'},'Deleted')] : (isOwner() && j.doneBy? ' · Done by '+nameOf(j.doneBy) : null)),
       j.text? h('span',{},linkify(j.text)) : null, thumbs(j.photos)),
-    canClose()? h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore') : null);
+    h('div',{class:'row-actions'},
+      j.deleted && isOwner()? purgeButton('job', j) : null,
+      canClose()? h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore') : null));
 }
 function nowCard(i){
   const first = liveVids(i)[0];
@@ -677,7 +700,9 @@ function nowCard(i){
 function archiveRow(i, at){
   return h('div',{class:'row-a'},
     h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('note-'+i.id)}, h('span',{class:'date'},venueTag(i)+' · '+shortDate(at)), i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
-    h('button',{class:'restore',onclick:()=>restore(i)},'Restore'));
+    h('div',{class:'row-actions'},
+      i.deleted && isOwner()? purgeButton('note', i) : null,
+      h('button',{class:'restore',onclick:()=>restore(i)},'Restore')));
 }
 function infoRow(n){
   return h('div',{class:'info'},
