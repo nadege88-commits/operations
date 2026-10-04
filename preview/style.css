@@ -327,5 +327,6 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .pwbox input{padding-right:48px!important;width:100%}
 .pwbox .eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
 .pwbox .eye svg{width:20px;height:20px}
+.notset{color:var(--soon);font-weight:700}
 
 .testbadge{position:fixed;left:50%;bottom:calc(6px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:#FF9A52;color:#0D0F16;font-size:11px;font-weight:800;letter-spacing:.1em;padding:3px 10px;border-radius:999px;z-index:40;pointer-events:none}

@@ -508,29 +508,63 @@ function fillSettings(){
       const e = email.value.trim().toLowerCase();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)){ toast('Enter an email address.'); return; }
       const row = {email:e, name:name.value.trim()||null, role:roles.value(), venue_ids: roles.value()==='manager'? venues.value() : []};
-      if (await insertRow('members', row)){ email.value=''; name.value=''; venues.reset(); loadTeam(); toast('Added. They can now create their account.'); }
+      if (await insertRow('members', row)){ email.value=''; name.value=''; venues.reset(); loadTeam(); loadSetup(); memberSheet(row, true); }
     }},'Add');
     slots.people.append(h('div',{class:'sec'}, h('h2',{},'People')), slots.memberList,
       h('div',{class:'list'}, h('div',{class:'add-member'}, email, name, roles.el, venues, add)),
       h('p',{class:'date',style:'margin:0'},'Maintenance: jobs, can finish them. Manager: their areas’ tasks (can finish those) and jobs (cannot finish jobs). Admin: adds jobs and assigns tasks, cannot finish anything, does not see Mili’s private notes. Owner: everything.'));
   }
+  if (!slots.people._setup){ slots.people._setup = true; loadSetup(); }
   const ms = [...S.members].sort((a,b)=>a.role.localeCompare(b.role)||(a.name||a.email).localeCompare(b.name||b.email));
   slots.memberList.replaceChildren(...ms.map(m=>h('div',{class:'member',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>memberSheet(m)},
     h('span',{class:'em'}, h('b',{},m.name||m.email.split('@')[0]), h('small',{class:'date',style:'display:block'}, m.email +
-      (m.role==='manager' && m.venue_ids?.length? ' · '+m.venue_ids.map(venueName).join(', ') : ''))),
+      (m.role==='manager' && m.venue_ids?.length? ' · '+m.venue_ids.map(venueName).join(', ') : ''),
+      S.setup && S.setup[m.email]===false? [' · ', h('span',{class:'notset'},'Not set up yet')] : null)),
     h('span',{class:'role',style:'--c:'+ROLE[m.role].c}, ROLE[m.role].label))));
 }
-function memberSheet(m){
+// Who has set up their account yet (owners only), for the "Not set up yet" marker.
+async function loadSetup(){
+  if (!isOwner()) return;
+  const {data, error} = await S.sb.rpc('team_setup');
+  if (!error && data){ S.setup = Object.fromEntries(data.map(r=>[r.email, r.set_up])); render(); }
+}
+// The invite: a message with a link that opens Set up account with their email filled in.
+async function sendInvite(m){
+  const link = location.origin + location.pathname + '?setup=' + encodeURIComponent(m.email);
+  const first = (m.name||'').trim().split(/\s+/)[0];
+  const text = 'Hi'+(first? ' '+first : '')+', you are on Northpoint Operations. Open this link to set up your account and choose a password:\n'+link;
+  if (navigator.share){ try { await navigator.share({text}); return; } catch (e){ if (e?.name==='AbortError') return; } }
+  try { await navigator.clipboard.writeText(text); toast('Invite copied. Paste it in WhatsApp.'); }
+  catch {   // no share sheet and no clipboard: show the message to copy by hand
+    const box = h('textarea',{id:'invite-text',readonly:true,rows:'5',style:'font:inherit;font-size:16px;width:100%;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px'}); box.value = text;
+    sheet('Invite', [h('p',{class:'date',style:'margin:0'},'Copy this and send it to them:'), box], async ()=>true, null, 'Done');
+    box.focus(); box.select();
+  }
+}
+function memberSheet(m, justAdded){
   const name = h('input',{id:'m-name',autocomplete:'off'}); name.value = m.name||'';
+  const lockedEmail = m.email===S.email || m.role==='owner';
+  const email = h('input',{id:'m-email',type:'email',autocomplete:'off',autocapitalize:'off',spellcheck:'false'}); email.value = m.email;
+  const notSetUp = justAdded || (S.setup && S.setup[m.email]===false);
+  const invite = notSetUp? h('div',{class:'field'},
+    h('label',{}, justAdded? 'Added. Now send them the invite:' : 'Not set up yet'),
+    h('button',{type:'button',class:'btn primary',style:'margin-left:0',onclick:()=>sendInvite({email:m.email, name:name.value})},'Send invite'),
+    h('small',{class:'date'},'Opens WhatsApp or Messages with a link. They tap it, choose a password, done.')) : null;
   const venues = venueChips(m.venue_ids||[]); venues.hidden = m.role!=='manager';
   const roles = rolePills(m.role, r=>{ venues.hidden = r!=='manager'; });
   const self = m.email===S.email;
-  sheet(m.email, [field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Areas'), venues)],
+  sheet(m.name || m.email, [invite, lockedEmail? null : field('Email',email), field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Areas'), venues)],
     async ()=>{
+      const newEmail = email.value.trim().toLowerCase();
+      if (!lockedEmail && newEmail!==m.email){
+        const {error} = await S.sb.rpc('change_member_email',{p_old:m.email, p_new:newEmail});
+        if (error){ toast(/check|valid|already|owner/i.test(error.message)? error.message : errText(error)); return false; }
+        toast('Email changed'); m = {...m, email:newEmail};
+      }
       const patch = {name:name.value.trim()||null, role: self? m.role : roles.value(), venue_ids: (self? m.role : roles.value())==='manager'? venues.value() : []};
       const {error} = await S.sb.from('members').update(patch).eq('email', m.email);
       if (error){ toast(errText(error)); return false; }
-      load('members'); loadTeam(); return true;
+      load('members'); loadTeam(); loadSetup(); return true;
     },
     self? null : async ()=>{
       const {error} = await S.sb.from('members').delete().eq('email', m.email);
@@ -1171,13 +1205,14 @@ function pwField(input, shown){
   set(!!shown);
   return h('div',{class:'pwbox'}, input, eye);
 }
-function authScreen(mode, note){
+function authScreen(mode, note, presetEmail){
   S.ready = false; shellKey = null;
   const email = h('input',{id:'email',type:'email',autocomplete:'email',placeholder:'Email','aria-label':'Email'});
+  if (presetEmail) email.value = presetEmail;
   const pass = h('input',{id:'password',type:'password',autocomplete:mode==='signup'?'new-password':'current-password',placeholder:'Password','aria-label':'Password'});
   const msg = h('p',{class:'date',style:'min-height:1.4em'}, note||'');
   const busy = on => { submit.disabled = on; submit.textContent = on? 'One moment…' : label; };
-  const label = mode==='signup' ? 'Create account' : mode==='reset' ? 'Send reset link' : 'Sign in';
+  const label = mode==='signup' ? 'Set up account' : mode==='reset' ? 'Send reset link' : 'Sign in';
   const submit = h('button',{type:'submit',class:'btn primary'},label);
   const form = h('form',{class:'auth',onsubmit:async e=>{
     e.preventDefault(); busy(true);
@@ -1194,13 +1229,15 @@ function authScreen(mode, note){
     }
     busy(false);
     if (error) msg.textContent = /invalid login/i.test(error.message) ? 'Wrong email or password.'
+      : /already registered|already been registered|already exists/i.test(error.message) ? 'This email is already set up. Sign in, or tap Forgot password.'
       : /rate limit|too many|security purposes/i.test(error.message) ? 'Too many emails sent. Use the newest email, or try again in an hour.' : error.message;
   }},
     h('img',{class:'logo',src:'icons/icon-192.png',alt:''}),
-    h('h1',{},'Operations'),
+    h('h1',{}, mode==='signup'? 'Set up account' : 'Operations'),
+    mode==='signup'? h('p',{}, presetEmail? 'Choose a password. You will use it to sign in.' : 'Use the email Mili added you with, and choose a password.') : null,
     email, mode==='reset'? null : pwField(pass, mode==='signup'), submit, msg,
     h('div',{class:'row-links'},
-      mode!=='signin'? h('button',{type:'button',class:'link',onclick:()=>authScreen('signin')},'Sign in') : h('button',{type:'button',class:'link',onclick:()=>authScreen('signup')},'Create account'),
+      mode!=='signin'? h('button',{type:'button',class:'link',onclick:()=>authScreen('signin')},'Sign in') : h('button',{type:'button',class:'link',onclick:()=>authScreen('signup')},'Set up account'),
       mode!=='reset'? h('button',{type:'button',class:'link',style:'color:var(--muted)',onclick:()=>authScreen('reset')},'Forgot password') : null));
   app.replaceChildren(form);
 }
@@ -1229,7 +1266,7 @@ function newPasswordScreen(){
 function notMemberScreen(){
   S.ready = false; shellKey = null;
   app.replaceChildren(h('div',{class:'auth'}, h('h1',{},'Almost there'),
-    h('p',{}, 'This account ('+S.email+') is not on the team yet. Ask Mili to add it in Settings, then reopen the app.'),
+    h('p',{}, 'This account ('+S.email+') is not on the team yet. Ask Mili to check the spelling of your email in Settings, then tap Try again.'),
     h('button',{class:'btn',onclick:()=>start()},'Try again'),
     h('button',{class:'link',onclick:signOut},'Sign out')));
 }
@@ -1250,6 +1287,11 @@ async function start(){
     S.linkError = false;
     if (!session){ authScreen('reset', 'That link has expired (each link works once). Send a new one:'); return; }
     setTimeout(()=>toast('That reset link has expired. Each link works once.'), 800);
+  }
+  if (S.setupEmail){
+    const em = S.setupEmail; S.setupEmail = null;
+    if (!session){ authScreen('signup', null, em); return; }
+    if ((session.user.email||'').toLowerCase()!==em) setTimeout(()=>toast('That invite is for '+em+'. Sign out first to set it up on this phone.'), 800);
   }
   if (!session){ authScreen('signin'); return; }
   S.email = (session.user.email||'').toLowerCase();
@@ -1281,6 +1323,8 @@ document.addEventListener('visibilitychange',()=>{ if (!document.hidden && S.rea
   const cfg = window.OPS_CONFIG||{};
   // Read the email link before Supabase clears it: a reset link must open the new-password
   // screen, not the app; a failed link (#error=…) is noted and cleared so it is not read as a page.
+  const setup = new URLSearchParams(location.search).get('setup');     // an invite link: set up this account
+  if (setup){ S.setupEmail = setup.trim().toLowerCase(); history.replaceState(null, '', location.pathname + location.hash); }
   if (/(^#|&)type=recovery(&|$)/.test(location.hash)) S.recovering = true;
   else if (/(^#|&)error(_code)?=/.test(location.hash)){ S.linkError = true; history.replaceState(null, '', location.pathname + location.search); }
   if (!window.supabase || !cfg.supabaseUrl || cfg.supabaseUrl==='SUPABASE_URL'){
