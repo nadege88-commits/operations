@@ -1,5 +1,6 @@
 // Sends push notifications from the inbox, following the house rules so they never get noisy:
-//  - push only for comments (to everyone involved) and new jobs (to maintenance); "job finished" stays in the inbox
+//  - push only for comments (to everyone involved), new jobs (to maintenance) and tasks given to a manager;
+//    "job finished" / "task finished" stay in the inbox
 //  - at most one push per person every 10 minutes; anything in between is bundled ("3 updates")
 //  - no quiet hours: the team also works night shifts
 //  - one 08:00 reminder for maintenance, only when something is due today or late
@@ -55,7 +56,7 @@ async function dispatch() {
   for (const r of rows ?? []) {
     const m = all.find((x) => x.email === r.recipient);
     const pushable = m && m.push_enabled && now - Date.parse(r.created_at) < MAX_AGE_MS &&
-      (r.kind === "comment" || (r.kind === "new_job" && m.role === "maintenance"));
+      (r.kind === "comment" || r.kind === "task" || (r.kind === "new_job" && m.role === "maintenance"));
     if (!pushable) skip.push(r.id);
     else byPerson.set(r.recipient, [...(byPerson.get(r.recipient) ?? []), r]);
   }
@@ -77,10 +78,12 @@ async function dispatch() {
       const r = items![0];
       payload = r.kind === "comment"
         ? { title: `${firstName(all, r.actor)} commented`, body: shorten(`${titleOf(r)}: “${r.preview ?? ""}”`, 140), url: r.job_id ? `#job-${r.job_id}` : `#note-${r.note_id}` }
+        : r.kind === "task"
+        ? { title: `New task from ${firstName(all, r.actor)}`, body: shorten(titleOf(r), 140), url: `#note-${r.note_id}` }
         : { title: "New maintenance job", body: shorten(titleOf(r), 140), url: `#job-${r.job_id}` };
     } else {
-      const c = items!.filter((r) => r.kind === "comment").length, j = items!.length - c;
-      const parts = [c ? `${c} comment${c > 1 ? "s" : ""}` : "", j ? `${j} new job${j > 1 ? "s" : ""}` : ""].filter(Boolean);
+      const c = items!.filter((r) => r.kind === "comment").length, t = items!.filter((r) => r.kind === "task").length, j = items!.length - c - t;
+      const parts = [c ? `${c} comment${c > 1 ? "s" : ""}` : "", t ? `${t} new task${t > 1 ? "s" : ""}` : "", j ? `${j} new job${j > 1 ? "s" : ""}` : ""].filter(Boolean);
       payload = { title: `${items!.length} updates`, body: parts.join(", "), url: "#inbox" };
     }
     await sendTo(email, payload);

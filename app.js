@@ -49,16 +49,23 @@ const byPrio = (a,b) => (a.priority||2)-(b.priority||2) || (a.createdAt||0)-(b.c
 const byJob = (a,b) => (a.priority||2)-(b.priority||2) || (a.due||'9999').localeCompare(b.due||'9999') || (a.createdAt||0)-(b.createdAt||0);
 const age = t => { if(!t) return ''; const d = Math.floor((Date.now()-t)/864e5); return d<1?'today':d+'d'; };
 const shortDate = t => t? new Date(t).toLocaleDateString(undefined,{day:'numeric',month:'short'}) : '';
-const venueName = id => (S.venues.find(v=>v.id===id)||{}).name || 'Unknown venue';
+const venueName = id => (S.venues.find(v=>v.id===id)||{}).name || 'Unknown area';
 const vids = i => i.venueIds || [];
 const liveVids = i => vids(i).filter(id=>S.venues.some(v=>v.id===id));
-const venueTag = i => i.all ? 'All venues' : (liveVids(i).map(venueName).join(' · ') || 'No venue');
+const venueTag = i => i.all ? 'All areas' : (liveVids(i).map(venueName).join(' · ') || 'No area');
 const vColor = id => { const v = S.venues.find(x=>x.id===id); return v ? 'var(--v'+((((v.order||1)-1)%8+8)%8+1)+')' : 'var(--muted)'; };
 const openNotes = vid => S.notes.filter(i=>!i.done && !i.deleted && (vid==null || vids(i).includes(vid)));
 const openJobs = vid => S.jobs.filter(j=>!j.done && !j.deleted && (vid==null || vids(j).includes(vid)));
 const isOwner = () => S.role==='owner';
-const canClose = () => S.role==='owner' || S.role==='maintenance';      // managers can comment but not finish or delete jobs
-const ROLE = {owner:{label:'Owner',c:'var(--v7)'}, manager:{label:'Manager',c:'var(--v3)'}, maintenance:{label:'Maintenance',c:'var(--fix)'}};
+const canClose = () => S.role==='owner' || S.role==='maintenance';      // managers and admins comment but do not finish or delete jobs
+// Tasks: owners finish anything; a manager finishes tasks that are theirs; admins never finish.
+const canFinishNote = i => S.role==='owner' || (S.role==='manager' && (i.assignee===S.email || i.createdBy===S.email));
+const canAssign = () => S.role==='owner' || S.role==='admin';
+const ROLE = {owner:{label:'Owner',c:'var(--v7)'}, admin:{label:'Admin',c:'var(--v5)'}, manager:{label:'Manager',c:'var(--v3)'}, maintenance:{label:'Maintenance',c:'var(--fix)'}};
+const myAreas = () => (S.team.find(t=>t.email===S.email)?.venue_ids)||[];
+const areasForMe = () => [...S.venues].sort(byOrder).filter(v=> S.role==='manager' ? myAreas().includes(v.id) : true);
+// Managers of an area right now (the picker follows Settings → People automatically).
+const managersOf = ids => S.team.filter(t=>t.role==='manager' && (t.venue_ids||[]).some(v=>ids.includes(v)));
 const nameOf = email => { if (!email) return 'Someone'; const m = S.team.find(t=>t.email===email); return m?.name || email.split('@')[0]; };
 const isVideo = p => /\.(mp4|mov|m4v|webm)$/i.test(p||'');
 const when = t => { if (!t) return ''; const d = new Date(t);
@@ -105,7 +112,7 @@ const BACK = Object.fromEntries(Object.entries(COLS).map(([k,v])=>[v,k]));
 const toRow = o => Object.fromEntries(Object.entries(o).map(([k,v])=>[COLS[k]||k, v]));
 const fromRow = r => Object.fromEntries(Object.entries(r).map(([k,v])=>[BACK[k]||k, v]));
 const TABLES = ['venues','notes','jobs','essentials','members','comments','inbox'];
-const tablesForRole = () => isOwner() ? TABLES : ['venues','jobs','comments','inbox'];
+const tablesForRole = () => isOwner() ? TABLES : S.role==='maintenance' ? ['venues','jobs','comments','inbox'] : ['venues','notes','jobs','comments','inbox'];
 // comments and inbox keep their database field names (job_id, created_at …); the rest are mapped to camelCase.
 const RAW = new Set(['comments','inbox','members']);
 
@@ -163,14 +170,17 @@ async function deleteRow(table, id){
 
 /* ---------- note & job actions (done and delete hide; Archive / Done tab bring back) ---------- */
 async function markDone(i){
+  if (!canFinishNote(i)) return;
   if (await updateRow('notes', i.id, {done:true,doneAt:Date.now()})) toast('Marked done', ()=>updateRow('notes', i.id, {done:false,doneAt:null}));
 }
 async function softDelete(i){
+  if (!canFinishNote(i)) return false;
   const ok = await updateRow('notes', i.id, {deleted:true,deletedAt:Date.now()});
   if (ok) toast('Deleted', ()=>updateRow('notes', i.id, {deleted:false,deletedAt:null}));
   return ok;
 }
 async function restore(i){
+  if (!canFinishNote(i)) return;
   if (await updateRow('notes', i.id, i.deleted? {deleted:false,deletedAt:null} : {done:false,doneAt:null})) toast('Restored');
 }
 async function jobDone(j){
@@ -192,10 +202,11 @@ function route(){
   const hsh = location.hash.slice(1);
   if (hsh.startsWith('job-')) return {name:'job', id:hsh.slice(4)};
   if (['settings','inbox'].includes(hsh)) return {name:hsh};
-  if (!isOwner()) return {name:'maintenance'};
+  if (S.role==='maintenance') return {name:'maintenance'};
   if (hsh.startsWith('note-')) return {name:'note', id:hsh.slice(5)};
-  if (['essentials','maintenance','archive'].includes(hsh)) return {name:hsh};
+  if (hsh==='maintenance') return {name:'maintenance'};
   if (hsh.startsWith('v-')) return {name:'venue', id:hsh.slice(2)};
+  if (isOwner() && ['essentials','archive'].includes(hsh)) return {name:hsh};
   return {name:'home'};
 }
 const go = r => { S.depth++; location.hash = r; };
@@ -224,21 +235,23 @@ function buildShell(r){
   if (r.name==='home'){
     const today = new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
     slots.maint = h('div',{});
-    slots.hero = h('div',{class:'hero'}); slots.now = h('div',{class:'group'});
-    slots.shortcuts = h('div',{class:'shortcuts'}); slots.venues = h('div',{class:'grid'});
+    slots.now = h('div',{class:'group'}); slots.venues = h('div',{class:'grid'});
+    slots.hero = isOwner()? h('div',{class:'hero'}) : null;
+    slots.shortcuts = isOwner()? h('div',{class:'shortcuts'}) : null;
     append(
       h('div',{class:'top'}, h('div',{style:'flex:1;min-width:0'}, h('div',{class:'date'},today), h('h1',{},'Operations')), themeBtn(), bell(), gear()),
       (slots.ask = h('div',{})),
-      slots.maint, h('div',{class:'mili-head'}, h('h2',{},'Mili')), slots.hero, slots.now, slots.shortcuts,
-      h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{},'Venues'), h('button',{onclick:()=>venueSheet(null)},'+ Add')), slots.venues));
+      slots.maint, isOwner()? h('div',{class:'mili-head'}, h('h2',{},'Mili')) : null, slots.hero, slots.now, slots.shortcuts,
+      h('div',{class:'group'}, h('div',{class:'sec'}, h('h2',{}, S.role==='manager'? 'My areas' : 'Areas'), isOwner()? h('button',{onclick:()=>venueSheet(null)},'+ Add') : null), slots.venues));
   } else if (r.name==='venue'){
     slots.head = h('div',{class:'vhead'}); slots.open = h('div',{class:'items'}); slots.vjobs = h('div',{class:'group'});
     append(slots.head, noteForm(r.id), slots.open, slots.vjobs);
   } else if (r.name==='maintenance'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'group',style:'gap:26px'});
-    slots.ask = isOwner()? null : h('div',{});
-    append(h('div',{class:'top'}, isOwner()? back() : null, h('h1',{},'Maintenance'), themeBtn(), isOwner()? null : bell(), isOwner()? null : gear()), slots.ask, jobForm(), slots.tabs, slots.list);
+    const crew = S.role==='maintenance';   // for maintenance this is the home screen
+    slots.ask = crew? h('div',{}) : null;
+    append(h('div',{class:'top'}, crew? null : back(), h('h1',{},'Maintenance'), themeBtn(), crew? bell() : null, crew? gear() : null), slots.ask, jobForm(), slots.tabs, slots.list);
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
@@ -281,14 +294,14 @@ function buildShell(r){
 }
 
 function venueTags(i){
-  if (i.all) return h('div',{class:'chips-row'}, h('span',{class:'chip',style:'--c:var(--accent)'},h('i'),'All venues'));
+  if (i.all) return h('div',{class:'chips-row'}, h('span',{class:'chip',style:'--c:var(--accent)'},h('i'),'All areas'));
   const ids = liveVids(i);
-  if (!ids.length) return h('div',{class:'chips-row'}, h('span',{class:'chip',style:'--c:var(--muted)'},h('i'),'No venue'));
+  if (!ids.length) return h('div',{class:'chips-row'}, h('span',{class:'chip',style:'--c:var(--muted)'},h('i'),'No area'));
   return h('div',{class:'chips-row'}, ids.map(id=>h('span',{class:'chip',style:'--c:'+vColor(id)},h('i'),venueName(id))));
 }
 const wrenchBadge = n => h('span',{class:'pw',html:I.wrench+n});
 // Venue logos (white artwork, shown black in light mode), keyed by venue id so renaming a venue keeps its logo.
-const LOGOS = new Set(['v1','v2','v3','v4','v5','v6','v7','v8','xmusti0bzrmndx']);
+const LOGOS = new Set(['v1','v2','v3','v4','v5','v6','v7','v8','xmusti0bzrmndx','cleaning','design']);
 const venueMark = v => LOGOS.has(v.id) ? h('img',{class:'vlogo',src:'logos/'+v.id+'.png',alt:v.name,decoding:'async'}) : h('b',{},v.name);
 
 function fill(r){
@@ -307,14 +320,14 @@ function fill(r){
 function fillHome(){
   fillPushAsk();
   const jo = openJobs(), late = jo.filter(isLate).length;
-  const open = openNotes(), vs = [...S.venues].sort(byOrder);
+  const open = openNotes(), vs = areasForMe();
   const nowN = open.filter(i=>i.priority===1).length;
-  slots.hero.replaceChildren(
+  if (slots.hero) slots.hero.replaceChildren(
     h('div',{class:'stats'},
       h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'High')),
       h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--soon)'}),'Open')),
       h('div',{class:'stat'}, h('b',{},String(jo.length)), h('span',{},h('i',{style:'--c:var(--fix)'}),'Jobs'))),
-    open.length? h('div',{class:'spread','aria-label':'Open notes per venue'},
+    open.length? h('div',{class:'spread','aria-label':'Open notes per area'},
       vs.map(v=>({v,n:openNotes(v.id).length})).filter(x=>x.n).map(x=>h('div',{style:'--c:'+vColor(x.v.id)+';flex:'+x.n,title:x.v.name}))) : null);
 
   slots.maint.replaceChildren(h('button',{class:'big',style:'--c:var(--fix)',onclick:()=>go('maintenance')},
@@ -328,12 +341,14 @@ function fillHome(){
   if (now.length) slots.now.append(h('div',{class:'sec'}, h('h2',{},'Now'), h('span',{class:'date'},String(now.length))),
     h('div',{class:'strip'}, now.map(nowCard)));
 
-  slots.shortcuts.replaceChildren(
+  if (slots.shortcuts) slots.shortcuts.replaceChildren(
     h('button',{class:'tile',style:'--c:var(--v7)',onclick:()=>go('essentials')}, h('span',{class:'ic',html:I.link}), h('span',{class:'tx'}, h('b',{},'Essentials'), h('small',{},String(S.essentials.length)))),
     h('button',{class:'tile only',style:'--c:var(--v3)','aria-label':'Archive',title:'Archive',onclick:()=>go('archive')}, h('span',{class:'ic',html:I.box})));
 
   slots.venues.replaceChildren();
-  if (!vs.length) slots.venues.append(h('button',{class:'add-venue',style:'grid-column:1/-1',onclick:()=>venueSheet(null),html:I.plus+'<span>Add your first venue</span>'}));
+  if (!vs.length) slots.venues.append(isOwner()
+    ? h('button',{class:'add-venue',style:'grid-column:1/-1',onclick:()=>venueSheet(null),html:I.plus+'<span>Add your first area</span>'})
+    : h('div',{class:'empty',style:'grid-column:1/-1'}, S.role==='manager'? 'No areas yet. Ask Mili to add you to your area in Settings.' : 'No areas yet.'));
   for (const v of vs){
     const vo = openNotes(v.id), vn = vo.filter(i=>i.priority===1).length, vf = openJobs(v.id).length;
     slots.venues.append(h('button',{class:'venue'+(vo.length||vf?'':' calm'),style:'--c:'+vColor(v.id),'aria-label':v.name,onclick:()=>go('v-'+v.id)},
@@ -345,13 +360,13 @@ function fillHome(){
 
 function fillVenue(id){
   const v = S.venues.find(x=>x.id===id);
-  if (!v){ slots.head.replaceChildren(h('div',{class:'bar'}, h('button',{class:'round','aria-label':'Back',onclick:()=>go(''),html:I.back})), h('h1',{},'Venue removed')); slots.open.replaceChildren(); slots.vjobs.replaceChildren(); return; }
+  if (!v){ slots.head.replaceChildren(h('div',{class:'bar'}, h('button',{class:'round','aria-label':'Back',onclick:()=>go(''),html:I.back})), h('h1',{},'Area removed')); slots.open.replaceChildren(); slots.vjobs.replaceChildren(); return; }
   const vo = openNotes(id).sort(byPrio), vn = vo.filter(i=>i.priority===1).length, vj = openJobs(id).sort(byJob);
   slots.head.style.setProperty('--c', vColor(id));
   slots.head.replaceChildren(
     h('div',{class:'bar'},
       h('button',{class:'round','aria-label':'Back',onclick:goBack,html:I.back}),
-      h('button',{class:'round','aria-label':'Rename venue',onclick:()=>venueSheet(v),html:I.edit})),
+      isOwner()? h('button',{class:'round','aria-label':'Rename area',onclick:()=>venueSheet(v),html:I.edit}) : h('span',{})),
     h('h1',{},v.name),
     h('div',{class:'n'}, vn? h('span',{class:'pw red'},vn+' high') : null, h('span',{class:'pw'},vo.length+' open'), vj.length? h('span',{class:'pw'},vj.length+(vj.length>1?' jobs':' job')) : null));
   slots.open.replaceChildren(...(vo.length? vo.map(i=>itemRow(i)) : [h('div',{class:'empty'},'Nothing open here.')]));
@@ -375,11 +390,11 @@ function fillMaintenance(){
   const section = (label, c, jobs, showVenue) => jobs.length && slots.list.append(h('div',{class:'group'},
     h('div',{class:'group-h',style:'--c:'+c}, h('i'), label, h('small',{}, jobs.length+(jobs.length>1?' jobs':' job'))),
     h('div',{class:'items'}, jobs.map(j=>jobRow(j,showVenue)))));
-  section('All venues','var(--accent)', all.filter(j=>j.all), false);
+  section('All areas','var(--accent)', all.filter(j=>j.all), false);
   const rest = all.filter(j=>!j.all);
   for (const v of [...S.venues].sort(byOrder)) section(v.name, vColor(v.id), rest.filter(j=>{ const l=liveVids(j); return l.length===1 && l[0]===v.id; }), false);
-  section('Several venues','var(--muted)', rest.filter(j=>liveVids(j).length>1), true);
-  section('No venue','var(--line)', rest.filter(j=>!liveVids(j).length), false);
+  section('Several areas','var(--muted)', rest.filter(j=>liveVids(j).length>1), true);
+  section('No area','var(--line)', rest.filter(j=>!liveVids(j).length), false);
 }
 
 function fillArchive(){
@@ -402,7 +417,7 @@ function fillEssentials(){
 
 function rolePills(start, onChange){
   let role = start;
-  const keys = ['maintenance','manager','owner'];
+  const keys = ['maintenance','manager','admin','owner'];
   const pills = keys.map(r=>h('button',{type:'button',class:'pill',style:'--c:'+ROLE[r].c,'aria-pressed':String(r===role),
     onclick:()=>{ role=r; pills.forEach((b,k)=>b.setAttribute('aria-pressed',String(keys[k]===r))); onChange?.(r); }}, h('i'), ROLE[r].label));
   return {el:h('div',{class:'prio',style:'flex-wrap:wrap'},pills), value:()=>role};
@@ -425,7 +440,7 @@ function fillSettings(){
     }},'Add');
     slots.people.append(h('div',{class:'sec'}, h('h2',{},'People')), slots.memberList,
       h('div',{class:'list'}, h('div',{class:'add-member'}, email, name, roles.el, venues, add)),
-      h('p',{class:'date',style:'margin:0'},'Maintenance: jobs, can finish them. Manager: jobs and comments for their venues, cannot finish. Owner: everything.'));
+      h('p',{class:'date',style:'margin:0'},'Maintenance: jobs, can finish them. Manager: their areas’ tasks (can finish those) and jobs (cannot finish jobs). Admin: adds jobs and assigns tasks, cannot finish anything, does not see Mili’s private notes. Owner: everything.'));
   }
   const ms = [...S.members].sort((a,b)=>a.role.localeCompare(b.role)||(a.name||a.email).localeCompare(b.name||b.email));
   slots.memberList.replaceChildren(...ms.map(m=>h('div',{class:'member',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>memberSheet(m)},
@@ -438,7 +453,7 @@ function memberSheet(m){
   const venues = venueChips(m.venue_ids||[]); venues.hidden = m.role!=='manager';
   const roles = rolePills(m.role, r=>{ venues.hidden = r!=='manager'; });
   const self = m.email===S.email;
-  sheet(m.email, [field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Venues'), venues)],
+  sheet(m.email, [field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Areas'), venues)],
     async ()=>{
       const patch = {name:name.value.trim()||null, role: self? m.role : roles.value(), venue_ids: (self? m.role : roles.value())==='manager'? venues.value() : []};
       const {error} = await S.sb.from('members').update(patch).eq('email', m.email);
@@ -464,10 +479,11 @@ function fillDetail(kind, id){
   slots.detailTools.replaceChildren(h('button',{class:'icon-btn','aria-label':'Edit',html:I.edit,onclick:()=> kind==='job'? jobSheet(it) : itemSheet(it)}));
   const meta = [['Where', venueTags(it)], ['Priority', h('span',{class:'chip',style:'--c:'+P.c},h('i'),P.label)]];
   if (it.due) meta.push(['Due', dueChip(it)]);
+  if (kind==='note' && it.assignee) meta.push(['For', nameOf(it.assignee)]);
   meta.push(['Added', (it.createdBy? nameOf(it.createdBy)+' · ' : '')+when(it.createdAt)]);
   if (it.done) meta.push(['Done', (it.doneBy? nameOf(it.doneBy)+' · ' : '')+when(it.doneAt)]);
   if (it.deleted) meta.push(['Deleted', when(it.deletedAt)]);
-  const mayClose = kind==='note' || canClose();
+  const mayClose = kind==='note' ? canFinishNote(it) : canClose();
   let action = null;
   if (mayClose){
     if (it.done || it.deleted) action = h('button',{class:'btn',onclick:()=> kind==='job'? jobRestore(it) : restore(it)},'Restore');
@@ -527,8 +543,9 @@ function fillInbox(){
   if (!S.inbox.length){ slots.list.replaceChildren(h('div',{class:'empty'},'Nothing yet. Comments and job updates for you show up here.')); return; }
   slots.list.replaceChildren(...S.inbox.map(n=>{
     const item = n.job_id? S.jobs.find(j=>j.id===n.job_id) : S.notes.find(x=>x.id===n.note_id);
-    const what = n.kind==='comment'? nameOf(n.actor)+' commented' : n.kind==='new_job'? 'New job from '+nameOf(n.actor) : nameOf(n.actor)+' finished a job';
-    const icon = n.kind==='comment'? I.chat : n.kind==='new_job'? I.wrench : I.tick;
+    const what = {comment:nameOf(n.actor)+' commented', new_job:'New job from '+nameOf(n.actor), job_done:nameOf(n.actor)+' finished a job',
+      task:'New task from '+nameOf(n.actor), task_done:nameOf(n.actor)+' finished a task'}[n.kind] || 'Update';
+    const icon = n.kind==='comment'? I.chat : n.kind==='new_job'? I.wrench : n.kind==='task'? I.pin : I.tick;
     const title = item?.text || n.preview || '';
     return h('button',{class:'inrow'+(n.read_at?'':' unread'),onclick:()=>go((n.job_id?'job-'+n.job_id:'note-'+n.note_id))},
       h('span',{class:'ic',html:icon}),
@@ -618,12 +635,19 @@ async function fillNotifications(){
 
 /* ---------- rows ---------- */
 const commentBadge = (kind,id) => { const n = commentsFor(kind,id).length; return n? h('span',{class:'cbadge',html:I.chat+n}) : null; };
+// "→ Sofia" on tasks given to someone else; "from Mili" on tasks someone gave me.
+function forWhom(i){
+  if (i.assignee && i.assignee!==S.email) return h('span',{class:'who'}, '→ '+nameOf(i.assignee));
+  if (i.assignee===S.email && i.createdBy && i.createdBy!==S.email) return h('span',{class:'who'}, 'from '+nameOf(i.createdBy));
+  return null;
+}
 function itemRow(i){
   const open = () => go('note-'+i.id);
-  return h('div',{class:'it',style:'--c:'+PRIO[i.priority||2].c},
-    h('button',{class:'check','aria-label':'Mark as done',html:I.tick,onclick:()=>markDone(i)}),
+  const tick = canFinishNote(i);
+  return h('div',{class:'it'+(tick?'':' nocheck'),style:'--c:'+PRIO[i.priority||2].c},
+    tick? h('button',{class:'check','aria-label':'Mark as done',html:I.tick,onclick:()=>markDone(i)}) : null,
     h('div',{class:'txt',role:'button',tabindex:'0',onclick:open,onkeydown:e=>{ if(e.key==='Enter') open(); }},
-      i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
+      forWhom(i), i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
     h('span',{class:'meta'}, commentBadge('note',i.id), age(i.createdAt)));
 }
 function jobRow(j, showVenue){
@@ -647,8 +671,8 @@ function nowCard(i){
       onclick:()=>go('note-'+i.id), onkeydown:e=>{ if(e.key==='Enter') go('note-'+i.id); }},
     venueTags(i),
     h('p',{}, i.text || 'Photo'),
-    h('div',{class:'foot'}, h('span',{class:'meta'}, age(i.createdAt)),
-      h('button',{class:'check',style:'--c:'+PRIO[i.priority||2].c,'aria-label':'Mark as done',html:I.tick,onclick:e=>{ e.stopPropagation(); markDone(i); }})));
+    h('div',{class:'foot'}, h('span',{class:'meta'}, forWhom(i), age(i.createdAt)),
+      canFinishNote(i)? h('button',{class:'check',style:'--c:'+PRIO[i.priority||2].c,'aria-label':'Mark as done',html:I.tick,onclick:e=>{ e.stopPropagation(); markDone(i); }}) : null));
 }
 function archiveRow(i, at){
   return h('div',{class:'row-a'},
@@ -688,7 +712,7 @@ function venueChips(selected){
 function venuePicker(selected, all){
   let isAll = !!all;
   const chips = venueChips(selected);
-  const allBtn = h('button',{type:'button',class:'pill all','aria-pressed':String(isAll),onclick:()=>{ isAll=!isAll; sync(); }}, h('i'),'All venues');
+  const allBtn = h('button',{type:'button',class:'pill all','aria-pressed':String(isAll),onclick:()=>{ isAll=!isAll; sync(); }}, h('i'),'All areas');
   const sync = () => { allBtn.setAttribute('aria-pressed',String(isAll)); chips.classList.toggle('dim',isAll); };
   sync();
   chips.prepend(allBtn);
@@ -737,25 +761,47 @@ function bindSubmit(c, submit){
   c.btn.addEventListener('click',submit);
 }
 
-// A note inside a venue. The wrench turns it into a maintenance job for this venue instead.
+// "Assign to": the current managers of the area(s), straight from Settings → People.
+function assigneePicker(areaIds, start){
+  let val = start || null;
+  const el = h('div',{class:'assign'});
+  const draw = () => {
+    const ids = typeof areaIds==='function' ? areaIds() : areaIds;
+    const mgrs = managersOf(ids);
+    if (val && !mgrs.some(m=>m.email===val)){ const cur = S.team.find(t=>t.email===val); if (cur) mgrs.push(cur); }
+    el.hidden = !mgrs.length && !val;
+    const opts = [{email:null}, ...mgrs];
+    el.replaceChildren(h('span',{class:'date'},'Assign to'), ...opts.map(m=>h('button',{type:'button',class:'pill',style:'--c:var(--v3)','aria-pressed':String(val===m.email),
+      onclick:()=>{ val = m.email; draw(); }}, m.email? nameOf(m.email) : (isOwner()? 'Private' : 'Nobody'))));
+  };
+  draw();
+  return {el, value:()=>val, reset:()=>{ val = null; draw(); }, redraw:draw};
+}
+// A note inside an area. Owners and admins can assign it to one of the area's managers; managers' notes are their own tasks.
+// The wrench turns it into a maintenance job for this area instead.
 function noteForm(venueId){
-  const c = composer('Add a note…','add-'+venueId,'notes');
+  let pick = null;
+  const folder = () => (S.role!=='owner' || pick?.value()) ? 'tasks' : 'notes';
+  const c = composer(S.role==='manager'? 'Add a task…' : 'Add a note…','add-'+venueId, folder);
+  pick = canAssign()? assigneePicker([venueId], null) : null;
   const prio = prioPills(PRIO,2);
   let asJob = false;
   const tool = h('button',{class:'pill tool','aria-pressed':'false','aria-label':'Make it a maintenance job',title:'Maintenance job',html:I.wrench,
     onclick:()=>{ asJob=!asJob; tool.setAttribute('aria-pressed',String(asJob)); }});
-  c.more.append(c.pics.strip, c.pics.input, h('div',{class:'add-bar'}, prio.el, tool, c.pics.button, c.btn));
+  c.more.append(c.pics.strip, c.pics.input, pick? pick.el : null, h('div',{class:'add-bar'}, prio.el, tool, c.pics.button, c.btn));
   bindSubmit(c, async ()=>{
     const text = c.ta.value.trim(), photos = c.pics.value();
     if (!text && !photos.length) return;
     if (asJob && photos.length){ toast('Add job photos from the Maintenance page.'); return; }
+    if (photos.length && folder()==='notes' && pick?.value()){ toast('Remove the photo or add it after assigning.'); return; }
     c.ta.value=''; c.grow();
     const ok = asJob
       ? await insertRow('jobs',{id:newId(),text,venueIds:[venueId],all:false,priority:prio.value(),due:null,photos:[],done:false,deleted:false,createdAt:Date.now()})
-      : await insertRow('notes',{id:newId(),venueIds:[venueId],text,photos,priority:prio.value(),pinned:false,done:false,deleted:false,createdAt:Date.now()});
+      : await insertRow('notes',{id:newId(),venueIds:[venueId],text,photos,priority:prio.value(),pinned:false,done:false,deleted:false,createdAt:Date.now(),
+          createdBy:S.email, assignee: S.role==='manager'? S.email : (pick? pick.value() : null)});
     if (!ok){ c.ta.value=text; c.grow(); return; }
     if (asJob) toast('Added to Maintenance');
-    dropPhotos(c.pics.removed); c.pics.reset(); c.grow();
+    dropPhotos(c.pics.removed); c.pics.reset(); c.grow(); pick?.reset();
     asJob=false; tool.setAttribute('aria-pressed','false');
   });
   return c.form;
@@ -868,6 +914,7 @@ async function uploadPhoto(blob, folder, ext='jpg', type='image/jpeg'){
 function dropPhotos(paths){ if (paths.length) S.sb.storage.from('photos').remove(paths.flatMap(p=>isVideo(p)? [p, p+'.jpg'] : [p])); }
 function photoPicker(initial, folder){
   let paths = [...initial], pending = 0;
+  const fold = typeof folder==='function' ? folder : () => folder;
   const picker = {removed:[], onchange:null, busy:()=>pending>0};
   const strip = h('div',{class:'thumbs'});
   const input = h('input',{type:'file',accept:'image/*,video/*',multiple:true,hidden:true});
@@ -882,14 +929,14 @@ function photoPicker(initial, folder){
         if (f.type.startsWith('video/')){
           if (f.size > MAX_VIDEO){ toast('Video too long (max 50 MB, about 1 minute). Record a shorter clip.'); throw 0; }
           const ext = f.type==='video/quicktime'? 'mov' : f.type==='video/webm'? 'webm' : 'mp4';
-          const path = await uploadPhoto(f, folder, ext, f.type||'video/mp4');
+          const path = await uploadPhoto(f, fold(), ext, f.type||'video/mp4');
           const poster = await videoPoster(f);
           if (poster){
             const {error} = await S.sb.storage.from('photos').upload(path+'.jpg', poster, {contentType:'image/jpeg'});
             if (!error) photoCache.set(path+'.jpg', Promise.resolve(URL.createObjectURL(poster)));
           }
           paths.push(path);
-        } else paths.push(await uploadPhoto(await shrink(f), folder));
+        } else paths.push(await uploadPhoto(await shrink(f), fold()));
       }
       catch (e) { if (e!==0) toast(navigator.onLine? 'That file could not be added.' : 'No connection. Add it when you have signal.'); }
       pending--; draw(); picker.onchange?.();
@@ -930,21 +977,27 @@ function itemSheet(i){
   const prio = prioPills(PRIO, i.priority||2, true);
   const pin = h('button',{type:'button',class:'pill pinned','aria-pressed':String(pinned),onclick:()=>{pinned=!pinned;pin.setAttribute('aria-pressed',String(pinned));}}, h('span',{html:I.pin,style:'display:flex'}),'Pin to Now');
   const chips = venueChips(vids(i));
-  const pics = photoPicker(i.photos||[], 'notes');
-  sheet('Edit note', [
+  const pick = canAssign()? assigneePicker(()=>chips.value(), i.assignee) : null;
+  if (pick) chips.addEventListener('click', ()=>setTimeout(pick.redraw));
+  const pics = photoPicker(i.photos||[], ()=> (S.role!=='owner' || i.assignee || pick?.value()) ? 'tasks' : 'notes');
+  sheet(i.assignee || S.role!=='owner' ? 'Edit task' : 'Edit note', [
     field('Note',ta),
     h('div',{class:'field'}, h('label',{},'Photos'), h('div',{class:'add-bar'}, pics.strip, pics.button), pics.input),
     h('div',{class:'add-bar'}, prio.el, pin),
-    h('div',{class:'field'}, h('label',{},'Venues'), chips),
+    h('div',{class:'field'}, h('label',{},'Areas'), chips),
+    pick? pick.el : null,
     i.createdAt? h('div',{class:'date'},'Added '+shortDate(i.createdAt)) : null
   ], async ()=>{
     const text = ta.value.trim(), photos = pics.value(), venueIds = chips.value();
     if (!text && !photos.length){ toast('Write something or add a photo.'); return false; }
-    if (!venueIds.length){ toast('Tick at least one venue.'); return false; }
-    const ok = await updateRow('notes', i.id, {text,photos,priority:prio.value(),pinned,venueIds});
+    if (!venueIds.length){ toast('Tick at least one area.'); return false; }
+    const patch = {text,photos,priority:prio.value(),pinned,venueIds};
+    if (pick) patch.assignee = pick.value();
+    if (pick && pick.value() && (i.photos||[]).some(p=>p.startsWith('notes/'))) toast('Note: photos added while it was private stay visible to owners only.');
+    const ok = await updateRow('notes', i.id, patch);
     if (ok) dropPhotos(pics.removed);
     return ok;
-  }, ()=>softDelete(i));
+  }, canFinishNote(i)? ()=>softDelete(i) : null);
 }
 
 function jobSheet(j){
@@ -971,9 +1024,9 @@ function venueSheet(v){
   // Deleting a venue removes notes only it holds; shared notes and jobs just drop this venue.
   const own = v? S.notes.filter(i=>vids(i).length===1 && vids(i)[0]===v.id) : [];
   const n = own.length;
-  sheet(v?'Venue':'New venue', [field('Name',inp), v&&n? h('div',{class:'date'},'Deleting also removes its '+n+' note'+(n>1?'s':'')+'.') : null],
+  sheet(v?'Area':'New area', [field('Name',inp), v&&n? h('div',{class:'date'},'Deleting also removes its '+n+' note'+(n>1?'s':'')+'.') : null],
     ()=>{
-      const name = inp.value.trim(); if(!name){ toast('Give the venue a name.'); return false; }
+      const name = inp.value.trim(); if(!name){ toast('Give the area a name.'); return false; }
       if (v) return updateRow('venues', v.id, {name});
       const order = S.venues.reduce((m,x)=>Math.max(m,x.order||0),0)+1;
       return insertRow('venues',{id:newId(),name,order,createdAt:Date.now()});

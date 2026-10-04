@@ -313,3 +313,7 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .ask .tx small{color:var(--muted);font-size:13px}
 .ask-actions{display:flex;align-items:center;gap:12px;margin-left:auto}
 .ask-actions .go{margin-left:0}
+/* tasks: who a task is for, and the assign-to picker */
+.who{font-size:12px;font-weight:700;color:var(--v3);white-space:nowrap}
+.assign{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.assign .date{margin-right:2px}
