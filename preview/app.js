@@ -133,11 +133,26 @@ function errText(error){
   if (error?.code==='42501' || /row-level security/i.test(error?.message||'')) return 'This account cannot change that.';
   return 'Could not save. Check the connection and try again.';
 }
+// Finished and deleted notes and jobs older than this stay in the database but are not loaded, so the app stays quick
+// as the years add up. "Show older" in the Done lists brings them in for that session.
+const KEEP_DAYS = 60;
 async function load(table){
-  let qry = S.sb.from(table).select('*');
-  if (table==='inbox') qry = qry.order('created_at',{ascending:false}).limit(150);
-  const {data, error} = await qry;
-  if (error) return;
+  const build = () => {
+    let qry = S.sb.from(table).select('*');
+    if (table==='inbox') return qry.order('created_at',{ascending:false}).limit(150);
+    if ((table==='notes' || table==='jobs') && !S.older){
+      const t = Date.now() - KEEP_DAYS*864e5;
+      qry = qry.or('and(done.eq.false,deleted.eq.false),done_at.gte.'+t+',deleted_at.gte.'+t+',and(done.eq.true,done_at.is.null),and(deleted.eq.true,deleted_at.is.null)');
+    }
+    return qry.order(table==='members'? 'email' : 'id');
+  };
+  let data = [];
+  for (let from = 0; ; from += 1000){                           // the database hands out at most 1000 rows per request
+    const r = table==='inbox'? await build() : await build().range(from, from+999);
+    if (r.error) return;
+    data = data.concat(r.data);
+    if (table==='inbox' || r.data.length < 1000) break;
+  }
   S[table] = RAW.has(table) ? data : data.map(fromRow);
   saveCache(); render();
 }
@@ -382,7 +397,7 @@ function fillMaintenance(){
   slots.list.replaceChildren();
   if (tab==='closed'){
     const list = closed.sort((a,b)=>((b.deletedAt||b.doneAt||0)-(a.deletedAt||a.doneAt||0)));
-    slots.list.append(h('div',{class:'list'}, ...(list.length? list.map(j=>closedJobRow(j)) : [h('div',{class:'empty'},'No finished jobs yet.')])));
+    slots.list.append(h('div',{class:'list'}, ...(list.length? list.map(j=>closedJobRow(j)) : [h('div',{class:'empty'},'No finished jobs yet.')])), olderLink());
     return;
   }
   const all = openJobs().sort(byJob);
@@ -397,6 +412,8 @@ function fillMaintenance(){
   section('No area','var(--line)', rest.filter(j=>!liveVids(j).length), false);
 }
 
+const olderLink = () => { document.querySelector('.older')?.remove(); return S.older? '' : h('button',{class:'link older',style:'align-self:center;color:var(--muted);padding:12px;width:100%;text-align:center',
+  onclick:()=>{ S.older = true; toast('Loading older items…'); load('notes'); load('jobs'); }},'Show items finished more than '+KEEP_DAYS+' days ago'); };
 function fillArchive(){
   const tab = S.archiveTab;
   const pool = S.notes.filter(i=> tab==='deleted' ? i.deleted : (i.done && !i.deleted));
@@ -407,7 +424,7 @@ function fillArchive(){
   const at = i => tab==='deleted'? i.deletedAt : i.doneAt;
   const list = pool.filter(i=>!q || ((i.text||'')+' '+venueTag(i)).toLowerCase().includes(q)).sort((a,b)=>(at(b)||0)-(at(a)||0));
   const empty = q? 'Nothing matches.' : tab==='deleted'? 'Nothing deleted.' : 'Nothing marked done yet.';
-  slots.list.replaceChildren(...(list.length? list.map(i=>archiveRow(i, at(i))) : [h('div',{class:'empty'},empty)]));
+  slots.list.replaceChildren(...(list.length? list.map(i=>archiveRow(i, at(i))) : [h('div',{class:'empty'},empty)]), olderLink());
 }
 
 function fillEssentials(){
