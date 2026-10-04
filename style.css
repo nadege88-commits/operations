@@ -12,7 +12,7 @@
 }
 
 *{box-sizing:border-box}
-html{background:var(--bg)}
+html{background:var(--bg);touch-action:manipulation}   /* no double-tap zoom; pinch still works for photos */
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 var(--font);padding-inline:max(16px,env(safe-area-inset-left));padding-top:calc(14px + env(safe-area-inset-top,0px));padding-bottom:calc(72px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
 img{max-width:100%}
