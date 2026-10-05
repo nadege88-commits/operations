@@ -945,10 +945,13 @@ function composer(placeholder, id, folder){
   const pics = photoPicker([], folder);
   const more = h('div',{class:'more'});
   const comment = id.startsWith('cmt-');
-  // × = changed my mind: clear what was typed or attached, put the keyboard away, fold the box.
-  const close = h('button',{type:'button',class:'add-x','aria-label':'Cancel',html:I.x,onclick:()=>{
-    ta.value = ''; dropPhotos(pics.value()); pics.reset(); ta.blur(); form.classList.remove('open'); grow(); }});
-  const form = h('div',{class:'add'+(comment? '' : ' hl')}, h('div',{class:'add-top'}, comment? null : h('span',{class:'add-plus',html:I.plus}), ta, close), more);
+  // Cancel = changed my mind: clear what was typed or attached, put the keyboard away, fold the box.
+  const cancel = () => { ta.value = ''; dropPhotos(pics.value()); pics.reset(); ta.blur(); form.classList.remove('open'); grow(); };
+  // The + opens the box; once open it turns into × and closes it again. Comments keep a small × on the right instead.
+  const plus = comment? null : h('button',{type:'button',class:'add-plus','aria-label':'Add',html:I.plus,
+    onclick:()=>{ if (form.classList.contains('open')) cancel(); else { form.classList.add('open'); ta.focus(); } }});
+  const close = comment? h('button',{type:'button',class:'add-x','aria-label':'Cancel',html:I.x,onclick:cancel}) : null;
+  const form = h('div',{class:'add'+(comment? '' : ' hl')}, h('div',{class:'add-top'}, plus, ta, close), more);
   const grow = ()=>{ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; btn.disabled=!ta.value.trim() && !pics.value().length; };
   pics.onchange = grow;
   form._idle = () => !ta.value.trim() && !pics.value().length && !pics.busy();

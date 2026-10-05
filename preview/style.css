@@ -105,7 +105,8 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .add.hl{border:1.5px solid color-mix(in srgb,var(--accent) 60%,transparent);background:color-mix(in srgb,var(--accent) 9%,var(--surface));box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 10%,transparent)}
 .add.hl textarea::placeholder{color:color-mix(in srgb,var(--ink) 70%,transparent);font-weight:600}
 .add-plus{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;flex:none;background:var(--accent);color:var(--accent-ink)}
-.add-plus svg{width:16px;height:16px;stroke-width:2.6}
+.add-plus svg{width:16px;height:16px;stroke-width:2.6;transition:transform .2s}
+.add.open .add-plus svg{transform:rotate(45deg)}
 .add-x{width:28px;height:28px;border-radius:50%;display:none;place-items:center;flex:none;color:var(--muted);background:var(--line)}
 .add-x svg{width:14px;height:14px;stroke-width:2.4}
 .add.open .add-x{display:grid}
