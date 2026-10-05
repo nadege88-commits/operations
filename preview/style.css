@@ -320,6 +320,14 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .venue:has(.vlogo){align-items:center;text-align:center}
 .venue .vlogo{object-position:center;margin-inline:auto}
 .venue:has(.vlogo) .n{justify-content:center}
+/* Managers have one or two areas: each gets a full-width card about the size of four small ones. */
+.grid.mine{grid-template-columns:1fr;gap:12px}
+.grid.mine .venue{min-height:190px;justify-content:center;align-items:center;text-align:center;gap:14px;border-radius:22px;padding:18px}
+.grid.mine .venue .vlogo{height:84px;max-width:80%}
+.grid.mine .venue b{font-size:24px}
+.grid.mine .venue .n{justify-content:center}
+.grid.mine .venue .pw{font-size:14px;padding:4px 12px}
+.grid.mine .venue::before{width:220px;height:220px;right:-60px;bottom:-90px}
 /* Now strip: stays inside the page margins like everything else; shorter, narrower cards */
 .strip{margin-inline:0;padding-inline:0;border-radius:16px}
 .nowcard{flex:0 0 min(64%,240px);padding:10px 12px;gap:6px}

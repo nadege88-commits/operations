@@ -275,7 +275,7 @@ function buildShell(r){
   if (r.name==='home'){
     const today = new Date().toLocaleDateString(undefined,{weekday:'long',day:'numeric',month:'long'});
     slots.maint = h('div',{});
-    slots.now = h('div',{class:'group'}); slots.venues = h('div',{class:'grid'});
+    slots.now = h('div',{class:'group'}); slots.venues = h('div',{class:S.role==='manager'? 'grid mine' : 'grid'});   // managers: one big card per area
     slots.hero = isOwner()? h('div',{class:'hero'}) : null;
     slots.shortcuts = isOwner()? h('div',{class:'shortcuts'}) : null;
     append(
