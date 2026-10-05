@@ -383,10 +383,9 @@ function fillHome(){
       h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'High')),
       h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--soon)'}),'Open')),
       h('div',{class:'stat'}, h('b',{},String(jo.length)), h('span',{},h('i',{style:'--c:var(--fix)'}),'Jobs'))),
-    // The bar is all open work in the stats' own colours: red = High tasks, amber = the rest of the open tasks
-    // (so red + amber = Open), blue = maintenance jobs.
-    open.length || jo.length? h('div',{class:'spread','aria-label':'Open work: high tasks, other open tasks, jobs'},
-      [[nowN,'var(--now)','High'],[open.length-nowN,'var(--soon)','Other open'],[jo.length,'var(--fix)','Jobs']].filter(x=>x[0])
+    // The bar mirrors the three numbers: each colour is as long as its own number (High 9, Open 18, Jobs 5).
+    open.length || jo.length? h('div',{class:'spread','aria-label':'High, open and jobs'},
+      [[nowN,'var(--now)','High'],[open.length,'var(--soon)','Open'],[jo.length,'var(--fix)','Jobs']].filter(x=>x[0])
         .map(([n,c,l])=>h('div',{style:'--c:'+c+';flex:'+n,title:n+' '+l}))) : null);
 
   // Maintenance, and for owners "For me" beside it on the same line.
