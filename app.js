@@ -381,17 +381,23 @@ function fillHome(){
   if (slots.hero) slots.hero.replaceChildren(
     h('div',{class:'stats'},
       h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'High')),
-      h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--ink)'}),'Open')),
+      h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--soon)'}),'Open')),
       h('div',{class:'stat'}, h('b',{},String(jo.length)), h('span',{},h('i',{style:'--c:var(--fix)'}),'Jobs'))),
-    // The bar splits the open tasks by priority, in the same colours as the tasks themselves: red High, amber Medium, grey Low.
-    open.length? h('div',{class:'spread','aria-label':'Open tasks by priority'},
-      [1,2,3].map(p=>({p,n:open.filter(i=>(i.priority||2)===p).length})).filter(x=>x.n)
-        .map(x=>h('div',{style:'--c:'+PRIO[x.p].c+';flex:'+x.n,title:x.n+' '+PRIO[x.p].label}))) : null);
+    // The bar is all open work in the stats' own colours: red = High tasks, amber = the rest of the open tasks
+    // (so red + amber = Open), blue = maintenance jobs.
+    open.length || jo.length? h('div',{class:'spread','aria-label':'Open work: high tasks, other open tasks, jobs'},
+      [[nowN,'var(--now)','High'],[open.length-nowN,'var(--soon)','Other open'],[jo.length,'var(--fix)','Jobs']].filter(x=>x[0])
+        .map(([n,c,l])=>h('div',{style:'--c:'+c+';flex:'+n,title:n+' '+l}))) : null);
 
-  slots.maint.replaceChildren(h('button',{class:'big',style:'--c:var(--fix)',onclick:()=>go('maintenance')},
+  // Maintenance, and for owners "For me" beside it on the same line.
+  const maint = h('button',{class:'big',style:'--c:var(--fix)',onclick:()=>go('maintenance')},
     h('span',{class:'ic',html:I.wrench}),
     h('span',{class:'tx'}, h('b',{},'Maintenance'), h('small',{}, jo.length+' open', late? [' · ', h('em',{},late+' late')] : null)),
-    h('span',{class:'chev',html:I.chev})));
+    isOwner()? null : h('span',{class:'chev',html:I.chev}));
+  slots.maint.replaceChildren(isOwner()? h('div',{class:'big-row'}, maint,
+    h('button',{class:'big',style:'--c:var(--v3)',onclick:()=>go('forme')},
+      h('span',{class:'ic',html:I.user}),
+      h('span',{class:'tx'}, h('b',{},'For me'), h('small',{}, forMe().filter(i=>!i.done).length+' open')))) : maint);
 
   // Now = urgent notes plus anything pinned.
   const now = open.filter(i=>i.priority===1 || i.pinned).sort((a,b)=>(b.pinned?1:0)-(a.pinned?1:0) || byPrio(a,b));
@@ -401,7 +407,6 @@ function fillHome(){
 
   if (slots.shortcuts) slots.shortcuts.replaceChildren(
     h('button',{class:'tile',style:'--c:var(--v7)',onclick:()=>go('essentials')}, h('span',{class:'ic',html:I.link}), h('span',{class:'tx'}, h('b',{},'Essentials'), h('small',{},String(S.essentials.length)))),
-    h('button',{class:'tile',style:'--c:var(--v3)',onclick:()=>go('forme')}, h('span',{class:'ic',html:I.user}), h('span',{class:'tx'}, h('b',{},'For me'), h('small',{},String(forMe().filter(i=>!i.done).length)))),
     h('button',{class:'tile only',style:'--c:var(--v5)','aria-label':'Archive',title:'Archive',onclick:()=>go('archive')}, h('span',{class:'ic',html:I.box})));
 
   slots.venues.replaceChildren();

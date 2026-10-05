@@ -206,7 +206,11 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .mili-head h2{font-size:20px;flex:1}
 .mili-head .icon-btn{width:34px;height:34px}
 .mili{display:flex;flex-direction:column;gap:14px}
-.shortcuts{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+.shortcuts{grid-template-columns:minmax(0,1fr) auto}
+.big-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.big-row .big{padding:12px;gap:10px}
+.big-row .big b{font-size:16px;white-space:nowrap}
+.big-row .big .ic{width:34px;height:34px;border-radius:10px}
 .lockcard{display:flex;flex-direction:column;gap:12px}
 .due{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:var(--line);color:var(--ink);white-space:nowrap}
 .due.late{background:var(--now);color:#fff}
