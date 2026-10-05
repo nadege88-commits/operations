@@ -12,6 +12,7 @@ const I = {
   camera:'<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.5" r="3.5"/></svg>',
   link:'<svg viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3.2-3.2a4.5 4.5 0 0 0-6.4-6.4L12 5.6"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3.2 3.2a4.5 4.5 0 0 0 6.4 6.4L12 18.4"/></svg>',
   pin:'<svg viewBox="0 0 24 24"><path d="M9 4h6l-1 6 4 4H6l4-4zM12 14v7"/></svg>',
+  lock:'<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
   cal:'<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/></svg>',
   gear:'<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
   bell:'<svg viewBox="0 0 24 24"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>',
@@ -551,9 +552,15 @@ function memberSheet(m, justAdded){
     h('button',{type:'button',class:'btn primary',style:'margin-left:0',onclick:()=>sendInvite({email:m.email, name:name.value})},'Send invite'),
     h('small',{class:'date'},'Opens WhatsApp or Messages with a link. They tap it, choose a password, done.')) : null;
   const venues = venueChips(m.venue_ids||[]); venues.hidden = m.role!=='manager';
-  const roles = rolePills(m.role, r=>{ venues.hidden = r!=='manager'; });
+  let privOn = !!m.private_notes;
+  const priv = h('div',{class:'field'},
+    h('button',{type:'button',class:'pill priv','aria-pressed':String(privOn),onclick:e=>{ privOn=!privOn; e.currentTarget.setAttribute('aria-pressed',String(privOn)); }},
+      h('span',{html:I.lock,style:'display:flex'}),'Private notes'),
+    h('small',{class:'date'},'They can mark a note Private: only they see it, not owners.'));
+  priv.hidden = m.role!=='manager';
+  const roles = rolePills(m.role, r=>{ venues.hidden = r!=='manager'; priv.hidden = r!=='manager'; });
   const self = m.email===S.email;
-  sheet(m.name || m.email, [invite, lockedEmail? null : field('Email',email), field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Areas'), venues)],
+  sheet(m.name || m.email, [invite, lockedEmail? null : field('Email',email), field('Name',name), self? null : h('div',{class:'field'}, h('label',{},'Role'), roles.el), h('div',{class:'field'}, venues.hidden? null : h('label',{},'Areas'), venues), priv],
     async ()=>{
       const newEmail = email.value.trim().toLowerCase();
       if (!lockedEmail && newEmail!==m.email){
@@ -562,6 +569,7 @@ function memberSheet(m, justAdded){
         toast('Email changed'); m = {...m, email:newEmail};
       }
       const patch = {name:name.value.trim()||null, role: self? m.role : roles.value(), venue_ids: (self? m.role : roles.value())==='manager'? venues.value() : []};
+      if ('private_notes' in m) patch.private_notes = patch.role==='manager' && privOn;
       const {error} = await S.sb.from('members').update(patch).eq('email', m.email);
       if (error){ toast(errText(error)); return false; }
       load('members'); loadTeam(); loadSetup(); return true;
@@ -743,6 +751,7 @@ async function fillNotifications(){
 const commentBadge = (kind,id) => { const n = commentsFor(kind,id).length; return n? h('span',{class:'cbadge',html:I.chat+n}) : null; };
 // "→ Sofia" on tasks given to someone else; "from Mili" on tasks someone gave me.
 function forWhom(i){
+  if (i.private) return h('span',{class:'who priv',html:I.lock+'Private'});
   if (i.assignee && i.assignee!==S.email) return h('span',{class:'who'}, '→ '+nameOf(i.assignee));
   if (i.assignee===S.email && i.createdBy && i.createdBy!==S.email) return h('span',{class:'who'}, 'from '+nameOf(i.createdBy));
   return null;
@@ -898,7 +907,8 @@ function noteForm(venueId){
   let asJob = false;
   const tool = h('button',{class:'pill tool','aria-pressed':'false','aria-label':'Make it a maintenance job',title:'Maintenance job',html:I.wrench,
     onclick:()=>{ asJob=!asJob; tool.setAttribute('aria-pressed',String(asJob)); }});
-  c.more.append(c.pics.strip, c.pics.input, pick? pick.el : null, h('div',{class:'add-bar'}, prio.el, tool, c.pics.button, c.btn));
+  const priv = privatePill(false);                                // managers with private notes switched on: only they see it
+  c.more.append(...[c.pics.strip, c.pics.input, pick?.el, priv && h('div',{class:'add-bar'}, priv.el), h('div',{class:'add-bar'}, prio.el, tool, c.pics.button, c.btn)].filter(Boolean));   // append() would print "null"
   bindSubmit(c, async ()=>{
     const text = c.ta.value.trim(), photos = c.pics.value();
     if (!text && !photos.length) return;
@@ -908,13 +918,21 @@ function noteForm(venueId){
     const ok = asJob
       ? await insertRow('jobs',{id:newId(),text,venueIds:[venueId],all:false,priority:prio.value(),due:null,photos:[],done:false,deleted:false,createdAt:Date.now()})
       : await insertRow('notes',{id:newId(),venueIds:[venueId],text,photos,priority:prio.value(),pinned:false,done:false,deleted:false,createdAt:Date.now(),
-          createdBy:S.email, assignee: S.role==='manager'? S.email : (pick? pick.value() : null)});
+          createdBy:S.email, assignee: S.role==='manager'? S.email : (pick? pick.value() : null), ...(priv? {private:priv.value()} : {})});
     if (!ok){ c.ta.value=text; c.grow(); return; }
     if (asJob) toast('Added to Maintenance');
     dropPhotos(c.pics.removed); c.pics.reset(); c.grow(); pick?.reset();
-    asJob=false; tool.setAttribute('aria-pressed','false');
+    asJob=false; tool.setAttribute('aria-pressed','false'); priv?.reset();
   });
   return c.form;
+}
+// "Private": a note only its writer sees (not owners or admins). Only for managers Mili has given private notes.
+function privatePill(on){
+  if (S.role!=='manager' || !S.privateNotes) return null;
+  let val = !!on;
+  const el = h('button',{type:'button',class:'pill priv','aria-pressed':String(val),onclick:()=>{ val=!val; el.setAttribute('aria-pressed',String(val)); }},
+    h('span',{html:I.lock,style:'display:flex'}),'Private · only me');
+  return {el, value:()=>val, reset:()=>{ val=false; el.setAttribute('aria-pressed','false'); }};
 }
 function jobForm(){
   const c = composer('Add a maintenance job…','add-job','jobs');
@@ -1090,10 +1108,12 @@ function itemSheet(i){
   const pick = canAssign()? assigneePicker(()=>chips.value(), i.assignee) : null;
   if (pick) chips.addEventListener('click', ()=>setTimeout(pick.redraw));
   const pics = photoPicker(i.photos||[], ()=> (S.role!=='owner' || i.assignee || pick?.value()) ? 'tasks' : 'notes');
-  sheet(i.assignee || S.role!=='owner' ? 'Edit task' : 'Edit note', [
+  const priv = i.createdBy===S.email? privatePill(i.private) : null;
+  sheet(i.private? 'Edit note' : i.assignee || S.role!=='owner' ? 'Edit task' : 'Edit note', [
     field('Note',ta),
     h('div',{class:'field'}, h('label',{},'Photos'), h('div',{class:'add-bar'}, pics.strip, pics.button), pics.input),
     h('div',{class:'add-bar'}, prio.el, pin),
+    priv? h('div',{class:'add-bar'}, priv.el) : null,
     h('div',{class:'field'}, h('label',{},'Areas'), chips),
     pick? pick.el : null,
     i.createdAt? h('div',{class:'date'},'Added '+shortDate(i.createdAt)) : null
@@ -1103,6 +1123,7 @@ function itemSheet(i){
     if (!venueIds.length){ toast('Tick at least one area.'); return false; }
     const patch = {text,photos,priority:prio.value(),pinned,venueIds};
     if (pick) patch.assignee = pick.value();
+    if (priv) patch.private = priv.value();
     if (pick && pick.value() && (i.photos||[]).some(p=>p.startsWith('notes/'))) toast('Note: photos added while it was private stay visible to owners only.');
     const ok = await updateRow('notes', i.id, patch);
     if (ok) dropPhotos(pics.removed);
@@ -1296,11 +1317,12 @@ async function start(){
   if (!session){ authScreen('signin'); return; }
   S.email = (session.user.email||'').toLowerCase();
   if (loadCache(S.email) && S.role){ S.ready = true; render(true); }      // instant open from the last copy
-  const {data, error} = await S.sb.from('members').select('role,push_enabled').eq('email', S.email).maybeSingle();
+  const {data, error} = await S.sb.from('members').select('*').eq('email', S.email).maybeSingle();
   if (error){ if (!S.ready) app.replaceChildren(h('p',{class:'status'},'No connection. Open again when you have signal.')); return; }
   if (!data){ notMemberScreen(); return; }
   if (S.role && S.role!==data.role) shellKey = null;
   S.pushEnabled = data.push_enabled !== false;
+  S.privateNotes = !!data.private_notes;
   S.role = data.role; S.ready = true;
   await Promise.all([...tablesForRole().map(load), loadTeam()]);
   render(true);

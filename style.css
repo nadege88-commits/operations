@@ -102,6 +102,11 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .pill[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:#0D0F16}
 .pill[aria-pressed="true"] i{background:#0D0F16}
 .pill.tool{--c:var(--fix)}
+.pill.priv{--c:var(--v3)}
+.pill.priv svg{width:14px;height:14px}
+.field > .pill.priv{align-self:flex-start}
+.who.priv{display:inline-flex;align-items:center;gap:4px;color:var(--muted)}
+.who.priv svg{width:12px;height:12px}
 .pill.tool svg{width:15px;height:15px}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chips .pill i{background:var(--c)}
