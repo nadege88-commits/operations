@@ -26,6 +26,7 @@ const I = {
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   eye:'<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
   user:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+  x:'<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   eyeOff:'<svg viewBox="0 0 24 24"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/></svg>',
 };
 // Notes and jobs share High / Medium / Low.
@@ -930,15 +931,24 @@ function duePicker(start){
 }
 
 // The add box shows only its text field until she starts typing; the options open with it.
+// Tapping anywhere outside puts the keyboard away; an empty box also folds back up (a started one keeps its text).
 document.addEventListener('pointerdown', e=>{
-  document.querySelectorAll('.add.open').forEach(f=>{ if (!f.contains(e.target) && f._idle()) f.classList.remove('open'); });
+  document.querySelectorAll('.add.open').forEach(f=>{
+    if (f.contains(e.target) || e.target.closest?.('.sheet,.toast')) return;
+    if (f.contains(document.activeElement)) document.activeElement.blur();
+    if (f._idle()) f.classList.remove('open');
+  });
 });
 function composer(placeholder, id, folder){
   const ta = h('textarea',{id,rows:'1',placeholder,'aria-label':placeholder});
   const btn = h('button',{class:'go',disabled:true},'Add');
   const pics = photoPicker([], folder);
   const more = h('div',{class:'more'});
-  const form = h('div',{class:'add'}, ta, more);
+  const comment = id.startsWith('cmt-');
+  // × = changed my mind: clear what was typed or attached, put the keyboard away, fold the box.
+  const close = h('button',{type:'button',class:'add-x','aria-label':'Cancel',html:I.x,onclick:()=>{
+    ta.value = ''; dropPhotos(pics.value()); pics.reset(); ta.blur(); form.classList.remove('open'); grow(); }});
+  const form = h('div',{class:'add'+(comment? '' : ' hl')}, h('div',{class:'add-top'}, comment? null : h('span',{class:'add-plus',html:I.plus}), ta, close), more);
   const grow = ()=>{ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; btn.disabled=!ta.value.trim() && !pics.value().length; };
   pics.onchange = grow;
   form._idle = () => !ta.value.trim() && !pics.value().length && !pics.busy();
