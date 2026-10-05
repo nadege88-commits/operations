@@ -1,5 +1,5 @@
 // Keeps the app shell on the phone so it opens instantly and without signal. Data always comes live from Supabase.
-const VERSION = 'ops-preview-v17';
+const VERSION = 'ops-preview-v18';
 const SHELL = ['./','index.html','style.css','app.js','config.js','manifest.webmanifest','icons/apple-touch-icon.png','icons/icon-192.png',
   'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.min.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
