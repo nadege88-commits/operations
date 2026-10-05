@@ -381,10 +381,12 @@ function fillHome(){
   if (slots.hero) slots.hero.replaceChildren(
     h('div',{class:'stats'},
       h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'High')),
-      h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--soon)'}),'Open')),
+      h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--ink)'}),'Open')),
       h('div',{class:'stat'}, h('b',{},String(jo.length)), h('span',{},h('i',{style:'--c:var(--fix)'}),'Jobs'))),
-    open.length? h('div',{class:'spread','aria-label':'Open notes per area'},
-      vs.map(v=>({v,n:openNotes(v.id).length})).filter(x=>x.n).map(x=>h('div',{style:'--c:'+vColor(x.v.id)+';flex:'+x.n,title:x.v.name}))) : null);
+    // The bar splits the open tasks by priority, in the same colours as the tasks themselves: red High, amber Medium, grey Low.
+    open.length? h('div',{class:'spread','aria-label':'Open tasks by priority'},
+      [1,2,3].map(p=>({p,n:open.filter(i=>(i.priority||2)===p).length})).filter(x=>x.n)
+        .map(x=>h('div',{style:'--c:'+PRIO[x.p].c+';flex:'+x.n,title:x.n+' '+PRIO[x.p].label}))) : null);
 
   slots.maint.replaceChildren(h('button',{class:'big',style:'--c:var(--fix)',onclick:()=>go('maintenance')},
     h('span',{class:'ic',html:I.wrench}),
