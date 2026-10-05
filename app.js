@@ -34,7 +34,7 @@ const PRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'}
 const JPRIO = PRIO;
 
 const S = {sb:null, session:null, email:'', role:null, pushEnabled:true, venues:[], notes:[], jobs:[], essentials:[], members:[], team:[], comments:[], inbox:[],
-  archiveTab:'done', archiveQ:'', meTab:'open', jobTab:'open', areaTab:'open', online:navigator.onLine, ready:false, depth:0};
+  archiveTab:'done', archiveQ:'', essQ:'', meTab:'open', jobTab:'open', areaTab:'open', online:navigator.onLine, ready:false, depth:0};
 let shellKey = null;
 
 function h(tag, attrs, ...kids){
@@ -307,7 +307,10 @@ function buildShell(r){
     append(h('div',{class:'top'}, back(), h('h1',{},'Archive')), slots.tabs, q, slots.list);
   } else if (r.name==='essentials'){
     slots.list = h('div',{class:'list'});
-    append(h('div',{class:'top'}, back(), h('h1',{},'Essentials')), slots.list);
+    const q = h('input',{id:'essentials-search',type:'search',class:'search',placeholder:'Search','aria-label':'Search essentials'});
+    q.addEventListener('input',()=>{ S.essQ = q.value; render(); });
+    q.value = S.essQ||'';
+    append(h('div',{class:'top'}, back(), h('h1',{},'Essentials')), q, slots.list);
   } else if (r.name==='job' || r.name==='note'){
     slots.detail = h('div',{class:'group',style:'gap:14px'});
     slots.thread = h('div',{class:'thread'});
@@ -523,9 +526,13 @@ function fillArchive(){
   slots.list.replaceChildren(...(list.length? list.map(i=>archiveRow(i, at(i))) : [h('div',{class:'empty'},empty)]), olderLink());
 }
 
+// Search matches any part of the label or the text, ignoring capitals and accents ("wifi" finds "Wi-Fi password").
+const fold = t => (t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9@.]+/g,'');
 function fillEssentials(){
-  const rows = [...S.essentials].sort(byOrder).map(infoRow);
-  slots.list.replaceChildren(...rows, h('button',{class:'add-row',onclick:()=>infoSheet(null),html:I.plus+'<span>Add</span>'}));
+  const q = fold(S.essQ);
+  const list = [...S.essentials].sort(byOrder).filter(n=>!q || fold(n.label).includes(q) || fold(n.value).includes(q));
+  slots.list.replaceChildren(...(list.length || !q? list.map(infoRow) : [h('div',{class:'empty'},'Nothing matches.')]),
+    q? '' : h('button',{class:'add-row',onclick:()=>infoSheet(null),html:I.plus+'<span>Add</span>'}));
 }
 
 function rolePills(start, onChange){
