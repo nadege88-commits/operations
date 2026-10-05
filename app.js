@@ -25,6 +25,7 @@ const I = {
   trash:'<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6M14 11v6"/></svg>',
   plus:'<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
   eye:'<svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  user:'<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
   eyeOff:'<svg viewBox="0 0 24 24"><path d="M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-2.6 3.4M6.6 6.6C3.7 8.4 2 12 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/></svg>',
 };
 // Notes and jobs share High / Medium / Low.
@@ -32,7 +33,7 @@ const PRIO = {1:{label:'High',c:'var(--now)'},2:{label:'Medium',c:'var(--soon)'}
 const JPRIO = PRIO;
 
 const S = {sb:null, session:null, email:'', role:null, pushEnabled:true, venues:[], notes:[], jobs:[], essentials:[], members:[], team:[], comments:[], inbox:[],
-  archiveTab:'done', archiveQ:'', jobTab:'open', areaTab:'open', online:navigator.onLine, ready:false, depth:0};
+  archiveTab:'done', archiveQ:'', meTab:'open', jobTab:'open', areaTab:'open', online:navigator.onLine, ready:false, depth:0};
 let shellKey = null;
 
 function h(tag, attrs, ...kids){
@@ -245,7 +246,7 @@ function route(){
   if (hsh.startsWith('note-')) return {name:'note', id:hsh.slice(5)};
   if (hsh==='maintenance') return {name:'maintenance'};
   if (hsh.startsWith('v-')) return {name:'venue', id:hsh.slice(2)};
-  if (isOwner() && ['essentials','archive'].includes(hsh)) return {name:hsh};
+  if (isOwner() && ['essentials','forme','archive'].includes(hsh)) return {name:hsh};
   return {name:'home'};
 }
 const go = r => { S.depth++; location.hash = r; };
@@ -292,6 +293,10 @@ function buildShell(r){
     const crew = S.role==='maintenance';   // for maintenance this is the home screen
     slots.ask = crew? h('div',{}) : null;
     append(h('div',{class:'top'}, crew? null : back(), h('h1',{},'Maintenance'), themeBtn(), crew? bell() : null, crew? gear() : null), slots.ask, jobForm(), slots.tabs, slots.list);
+  } else if (r.name==='forme'){
+    slots.tabs = h('div',{class:'seg',role:'tablist'});
+    slots.list = h('div',{class:'group',style:'gap:26px'});
+    append(h('div',{class:'top'}, back(), h('h1',{},'For me'), themeBtn()), slots.tabs, slots.list);
   } else if (r.name==='archive'){
     slots.tabs = h('div',{class:'seg',role:'tablist'});
     slots.list = h('div',{class:'list'});
@@ -358,6 +363,7 @@ function fill(r){
   if (r.name==='home') fillHome();
   else if (r.name==='venue') fillVenue(r.id);
   else if (r.name==='maintenance') fillMaintenance();
+  else if (r.name==='forme') fillForMe();
   else if (r.name==='archive') fillArchive();
   else if (r.name==='essentials') fillEssentials();
   else if (r.name==='settings') fillSettings();
@@ -375,10 +381,12 @@ function fillHome(){
   if (slots.hero) slots.hero.replaceChildren(
     h('div',{class:'stats'},
       h('div',{class:'stat'}, h('b',{},String(nowN)), h('span',{},h('i',{style:'--c:var(--now)'}),'High')),
-      h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--soon)'}),'Open')),
+      h('div',{class:'stat'}, h('b',{},String(open.length)), h('span',{},h('i',{style:'--c:var(--ink)'}),'Open')),
       h('div',{class:'stat'}, h('b',{},String(jo.length)), h('span',{},h('i',{style:'--c:var(--fix)'}),'Jobs'))),
-    open.length? h('div',{class:'spread','aria-label':'Open notes per area'},
-      vs.map(v=>({v,n:openNotes(v.id).length})).filter(x=>x.n).map(x=>h('div',{style:'--c:'+vColor(x.v.id)+';flex:'+x.n,title:x.v.name}))) : null);
+    // The bar splits the open tasks by priority, in the same colours as the tasks themselves: red High, amber Medium, grey Low.
+    open.length? h('div',{class:'spread','aria-label':'Open tasks by priority'},
+      [1,2,3].map(p=>({p,n:open.filter(i=>(i.priority||2)===p).length})).filter(x=>x.n)
+        .map(x=>h('div',{style:'--c:'+PRIO[x.p].c+';flex:'+x.n,title:x.n+' '+PRIO[x.p].label}))) : null);
 
   slots.maint.replaceChildren(h('button',{class:'big',style:'--c:var(--fix)',onclick:()=>go('maintenance')},
     h('span',{class:'ic',html:I.wrench}),
@@ -393,7 +401,8 @@ function fillHome(){
 
   if (slots.shortcuts) slots.shortcuts.replaceChildren(
     h('button',{class:'tile',style:'--c:var(--v7)',onclick:()=>go('essentials')}, h('span',{class:'ic',html:I.link}), h('span',{class:'tx'}, h('b',{},'Essentials'), h('small',{},String(S.essentials.length)))),
-    h('button',{class:'tile only',style:'--c:var(--v3)','aria-label':'Archive',title:'Archive',onclick:()=>go('archive')}, h('span',{class:'ic',html:I.box})));
+    h('button',{class:'tile',style:'--c:var(--v3)',onclick:()=>go('forme')}, h('span',{class:'ic',html:I.user}), h('span',{class:'tx'}, h('b',{},'For me'), h('small',{},String(forMe().filter(i=>!i.done).length)))),
+    h('button',{class:'tile only',style:'--c:var(--v5)','aria-label':'Archive',title:'Archive',onclick:()=>go('archive')}, h('span',{class:'ic',html:I.box})));
 
   slots.venues.replaceChildren();
   if (!vs.length) slots.venues.append(isOwner()
@@ -468,6 +477,30 @@ function fillMaintenance(){
   for (const v of [...S.venues].sort(byOrder)) section(v.name, vColor(v.id), rest.filter(j=>{ const l=liveVids(j); return l.length===1 && l[0]===v.id; }), false);
   section('Several areas','var(--muted)', rest.filter(j=>liveVids(j).length>1), true);
   section('No area','var(--line)', rest.filter(j=>!liveVids(j).length), false);
+}
+
+// For me: every task given to me (by a manager asking, or by another owner), grouped per area like Maintenance.
+const forMe = () => S.notes.filter(i=>i.assignee===S.email && !i.deleted);
+function fillForMe(){
+  const tab = S.meTab, mine = forMe();
+  const open = mine.filter(i=>!i.done), done = mine.filter(i=>i.done);
+  slots.tabs.replaceChildren(...[['open','Open · '+open.length],['done','Done · '+done.length]].map(([t,label])=>
+    h('button',{role:'tab','aria-selected':String(t===tab),onclick:()=>{S.meTab=t; render();}},label)));
+  slots.list.replaceChildren();
+  if (tab==='done'){
+    const list = done.sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+    slots.list.append(h('div',{class:'list'}, ...(list.length? list.map(i=>doneRow(i,'note')) : [h('div',{class:'empty'},'Nothing finished yet.')])), olderLink());
+    return;
+  }
+  if (!open.length){ slots.list.append(h('div',{class:'empty'},'Nothing for you right now.')); return; }
+  const section = (label, c, items) => items.length && slots.list.append(h('div',{class:'group'},
+    h('div',{class:'group-h',style:'--c:'+c}, h('i'), label, h('small',{}, items.length+(items.length>1?' tasks':' task'))),
+    h('div',{class:'items'}, items.sort(byPrio).map(i=>itemRow(i)))));
+  section('All areas','var(--accent)', open.filter(i=>i.all));
+  const rest = open.filter(i=>!i.all);
+  for (const v of [...S.venues].sort(byOrder)) section(v.name, vColor(v.id), rest.filter(i=>{ const l=liveVids(i); return l.length===1 && l[0]===v.id; }));
+  section('Several areas','var(--muted)', rest.filter(i=>liveVids(i).length>1));
+  section('No area','var(--line)', rest.filter(i=>!liveVids(i).length));
 }
 
 const olderLink = () => { document.querySelector('.older')?.remove(); return S.older? '' : h('button',{class:'link older',style:'align-self:center;color:var(--muted);padding:12px;width:100%;text-align:center',
@@ -942,7 +975,8 @@ function noteForm(venueId){
   const tool = h('button',{class:'pill tool','aria-pressed':'false','aria-label':'Make it a maintenance job',title:'Maintenance job',html:I.wrench,
     onclick:()=>{ asJob=!asJob; tool.setAttribute('aria-pressed',String(asJob)); }});
   const priv = privatePill(false);                                // managers with private notes switched on: only they see it
-  c.more.append(...[c.pics.strip, c.pics.input, pick?.el, priv && h('div',{class:'add-bar'}, priv.el), h('div',{class:'add-bar'}, prio.el, tool, c.pics.button, c.btn)].filter(Boolean));   // append() would print "null"
+  const ask = askPicker();                                        // managers: ask Mili instead of keeping it as their own task
+  c.more.append(...[c.pics.strip, c.pics.input, pick?.el, ask?.el, priv && h('div',{class:'add-bar'}, priv.el), h('div',{class:'add-bar'}, prio.el, tool, c.pics.button, c.btn)].filter(Boolean));   // append() would print "null"
   bindSubmit(c, async ()=>{
     const text = c.ta.value.trim(), photos = c.pics.value();
     if (!text && !photos.length) return;
@@ -952,13 +986,28 @@ function noteForm(venueId){
     const ok = asJob
       ? await insertRow('jobs',{id:newId(),text,venueIds:[venueId],all:false,priority:prio.value(),due:null,photos:[],done:false,deleted:false,createdAt:Date.now()})
       : await insertRow('notes',{id:newId(),venueIds:[venueId],text,photos,priority:prio.value(),pinned:false,done:false,deleted:false,createdAt:Date.now(),
-          createdBy:S.email, assignee: S.role==='manager'? S.email : (pick? pick.value() : null), ...(priv? {private:priv.value()} : {})});
+          createdBy:S.email, assignee: S.role==='manager'? (ask?.value() || S.email) : (pick? pick.value() : null),
+          ...(priv? {private: ask?.value()? false : priv.value()} : {})});
     if (!ok){ c.ta.value=text; c.grow(); return; }
     if (asJob) toast('Added to Maintenance');
+    else if (ask?.value()) toast('Sent to '+nameOf(ask.value()));
     dropPhotos(c.pics.removed); c.pics.reset(); c.grow(); pick?.reset();
-    asJob=false; tool.setAttribute('aria-pressed','false'); priv?.reset();
+    asJob=false; tool.setAttribute('aria-pressed','false'); priv?.reset(); ask?.reset();
   });
   return c.form;
+}
+// "Ask Mili": a manager gives the task to an owner instead of keeping it. Mili if an owner is called that, else every owner.
+function askPicker(){
+  if (S.role!=='manager') return null;
+  const owners = S.team.filter(t=>t.role==='owner'), mili = owners.filter(t=>/^mili/i.test(t.name||''));
+  const to = mili.length? mili : owners;
+  if (!to.length) return null;
+  let val = null;
+  const el = h('div',{class:'assign'});
+  const draw = () => el.replaceChildren(h('span',{class:'date'},'Ask'), ...to.map(o=>h('button',{type:'button',class:'pill',style:'--c:var(--v3)','aria-pressed':String(val===o.email),
+    onclick:()=>{ val = val===o.email? null : o.email; draw(); }}, nameOf(o.email))));
+  draw();
+  return {el, value:()=>val, reset:()=>{ val = null; draw(); }};
 }
 // "Private": a note or comment only its writer sees (not owners or admins). Only for managers Mili has given private notes.
 function privatePill(on){
