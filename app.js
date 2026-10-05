@@ -608,7 +608,7 @@ function fillDetail(kind, id){
       it.text? h('p',{class:'dtext'},linkify(it.text)) : null,
       thumbs(it.photos),
       h('dl',{class:'dmeta'}, meta.map(([k,v])=>[h('dt',{},k), h('dd',{},v)]))),
-    action);
+    action || '');   // replaceChildren() would print "null"
   const cs = commentsFor(kind,id);
   slots.thread.replaceChildren(...(cs.length? cs.map(commentRow) : [h('div',{class:'empty'},'No comments yet.')]));
   markReadFor(kind,id);
@@ -621,20 +621,21 @@ function commentRow(c){
     await deleteRow('comments', c.id);
   }},'Delete') : null;
   return h('div',{class:'cmt'+(mine?' mine':'')},
-    h('div',{class:'cmeta'}, h('b',{},nameOf(c.author)), h('span',{},when(c.created_at)), del),
+    h('div',{class:'cmeta'}, h('b',{},nameOf(c.author)), h('span',{},when(c.created_at)), c.private? h('span',{class:'who priv',html:I.lock+'Private'}) : null, del),
     c.body? h('p',{},linkify(c.body)) : null, thumbs(c.attachments));
 }
 function commentForm(kind, id){
   const c = composer('Write a comment…','cmt-'+id, kind==='job'? 'jobs' : 'notes');
   c.btn.textContent = 'Send';
-  c.more.append(c.pics.strip, c.pics.input, h('div',{class:'add-bar'}, c.pics.button, c.btn));
+  const priv = privatePill(false);                                // only she sees it, nobody is notified
+  c.more.append(c.pics.strip, c.pics.input, h('div',{class:'add-bar'}, priv?.el || '', c.pics.button, c.btn));
   bindSubmit(c, async ()=>{
     const body = c.ta.value.trim(), attachments = c.pics.value();
     if (!body && !attachments.length) return;
     c.ta.value=''; c.grow();
-    const row = {id:newId(), [kind==='job'?'job_id':'note_id']:id, body, attachments, author:S.email, created_at:new Date().toISOString()};
+    const row = {id:newId(), [kind==='job'?'job_id':'note_id']:id, body, attachments, author:S.email, created_at:new Date().toISOString(), ...(priv? {private:priv.value()} : {})};
     if (!await insertRow('comments', row)){ c.ta.value=body; c.grow(); return; }
-    c.pics.reset(); c.grow();
+    c.pics.reset(); c.grow(); priv?.reset();
   });
   return c.form;
 }
@@ -926,7 +927,7 @@ function noteForm(venueId){
   });
   return c.form;
 }
-// "Private": a note only its writer sees (not owners or admins). Only for managers Mili has given private notes.
+// "Private": a note or comment only its writer sees (not owners or admins). Only for managers Mili has given private notes.
 function privatePill(on){
   if (S.role!=='manager' || !S.privateNotes) return null;
   let val = !!on;
