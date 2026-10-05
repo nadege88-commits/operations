@@ -662,12 +662,39 @@ function fillInbox(){
       task:'New task from '+nameOf(n.actor), task_done:nameOf(n.actor)+' finished a task'}[n.kind] || 'Update';
     const icon = n.kind==='comment'? I.chat : n.kind==='new_job'? I.wrench : n.kind==='task'? I.pin : I.tick;
     const title = item?.text || n.preview || '';
-    return h('button',{class:'inrow'+(n.read_at?'':' unread'),onclick:()=>go((n.job_id?'job-'+n.job_id:'note-'+n.note_id))},
+    const row = h('button',{class:'inrow'+(n.read_at?'':' unread'),onclick:()=>{ if (!row._swiped) go((n.job_id?'job-'+n.job_id:'note-'+n.note_id)); }},
       h('span',{class:'ic',html:icon}),
       h('span',{class:'tx'}, h('b',{},what), title? h('span',{class:'pv'}, title) : null,
         n.kind==='comment' && n.preview && n.preview!==title? h('span',{class:'pv q'},'"'+n.preview+'"') : null),
       h('span',{class:'date'}, when(n.created_at)));
+    return swipeToDelete(row, ()=>deleteRow('inbox', n.id));
   }));
+}
+// Swipe a row right to left to delete it: a red Delete shows underneath; past a third of the width it goes.
+function swipeToDelete(row, onDelete){
+  const wrap = h('div',{class:'swipe'}, h('div',{class:'swipe-bg',html:I.trash+'<span>Delete</span>'}), row);
+  let x0 = null, y0 = 0, dx = 0, dir = null;
+  const slide = (x, anim) => { row.style.transition = anim? 'transform .2s ease' : 'none'; row.style.transform = x? `translateX(${x}px)` : ''; };
+  row.addEventListener('touchstart', e=>{ if (e.touches.length!==1) return; x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; dx = 0; dir = null; row._swiped = false; }, {passive:true});
+  row.addEventListener('touchmove', e=>{
+    if (x0===null) return;
+    const mx = e.touches[0].clientX - x0, my = e.touches[0].clientY - y0;
+    if (!dir){ if (Math.abs(mx)<8 && Math.abs(my)<8) return; dir = Math.abs(mx)>Math.abs(my) && mx<0 ? 'x' : 'y'; }
+    if (dir!=='x') return;
+    dx = Math.min(0, mx); row._swiped = true; slide(dx);
+  }, {passive:true});
+  const end = ()=>{
+    if (x0===null) return; x0 = null;
+    if (dir!=='x') return;
+    if (-dx > wrap.offsetWidth/3){
+      slide(-wrap.offsetWidth, true);
+      setTimeout(()=>{ wrap.style.transition = 'height .2s ease'; wrap.style.height = wrap.offsetHeight+'px'; requestAnimationFrame(()=>{ wrap.style.height = '0px'; }); }, 180);
+      setTimeout(onDelete, 400);
+    } else slide(0, true);
+    setTimeout(()=>{ row._swiped = false; }, 50);
+  };
+  row.addEventListener('touchend', end); row.addEventListener('touchcancel', ()=>{ dx = 0; end(); });
+  return wrap;
 }
 
 /* ---------- push notifications (opt-in per phone; rules live in the server sender) ---------- */
