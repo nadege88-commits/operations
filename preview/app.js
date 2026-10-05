@@ -435,14 +435,16 @@ function fillVenue(id){
   slots.vjobs.replaceChildren(...(vj.length? [h('div',{class:'sub-h',html:I.wrench+'<span>Maintenance</span>'}), h('div',{class:'items'}, vj.map(j=>jobRow(j,false)))] : []));
 }
 // A finished task or job in an area's Done list: when, who finished it, and Restore for those allowed to finish it.
+// Owners can swipe it right to left to delete it for good, like the inbox.
 function doneRow(i, kind){
   const job = kind==='job';
-  return h('div',{class:'row-a'},
+  return ownerSwipe(kind, i, h('div',{class:'row-a'},
     h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go((job?'job-':'note-')+i.id)},
       h('span',{class:'date'}, job? h('span',{style:'color:var(--fix)'},'Job · ') : null, shortDate(i.doneAt), i.doneBy? ' · Done by '+nameOf(i.doneBy) : null),
       i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
-    (job? canClose() : canFinishNote(i))? h('div',{class:'row-actions'}, h('button',{class:'restore',onclick:()=>job? jobRestore(i) : restore(i)},'Restore')) : null);
+    (job? canClose() : canFinishNote(i))? h('div',{class:'row-actions'}, h('button',{class:'restore',onclick:()=>job? jobRestore(i) : restore(i)},'Restore')) : null));
 }
+const ownerSwipe = (kind, it, row) => isOwner()? swipeToDelete(row, ()=>purge(kind, it)) : row;
 
 function fillMaintenance(){
   fillPushAsk();
@@ -697,6 +699,7 @@ function swipeToDelete(row, onDelete){
     setTimeout(()=>{ row._swiped = false; }, 50);
   };
   row.addEventListener('touchend', end); row.addEventListener('touchcancel', ()=>{ dx = 0; end(); });
+  row.addEventListener('click', e=>{ if (row._swiped){ e.stopPropagation(); e.preventDefault(); } }, true);   // a swipe is not a tap
   return wrap;
 }
 
@@ -805,13 +808,13 @@ function jobRow(j, showVenue){
     h('span',{class:'meta'}, commentBadge('job',j.id), dueChip(j) || age(j.createdAt)));
 }
 function closedJobRow(j){
-  return h('div',{class:'row-a'},
+  return ownerSwipe('job', j, h('div',{class:'row-a'},
     h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('job-'+j.id)}, h('span',{class:'date'}, venueTag(j)+' · '+shortDate(j.deletedAt||j.doneAt),
         j.deleted? [' · ', h('span',{class:'tag-del'},'Deleted')] : (isOwner() && j.doneBy? ' · Done by '+nameOf(j.doneBy) : null)),
       j.text? h('span',{},linkify(j.text)) : null, thumbs(j.photos)),
     h('div',{class:'row-actions'},
       j.deleted && isOwner()? purgeButton('job', j) : null,
-      canClose()? h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore') : null));
+      canClose()? h('button',{class:'restore',onclick:()=>jobRestore(j)},'Restore') : null)));
 }
 function nowCard(i){
   const first = liveVids(i)[0];
@@ -823,11 +826,11 @@ function nowCard(i){
       canFinishNote(i)? h('button',{class:'check',style:'--c:'+PRIO[i.priority||2].c,'aria-label':'Mark as done',html:I.tick,onclick:e=>{ e.stopPropagation(); markDone(i); }}) : null));
 }
 function archiveRow(i, at){
-  return h('div',{class:'row-a'},
+  return ownerSwipe('note', i, h('div',{class:'row-a'},
     h('div',{class:'txt',role:'button',tabindex:'0',style:'cursor:pointer',onclick:()=>go('note-'+i.id)}, h('span',{class:'date'},venueTag(i)+' · '+shortDate(at)), i.text? h('span',{},linkify(i.text)) : null, thumbs(i.photos)),
     h('div',{class:'row-actions'},
       i.deleted && isOwner()? purgeButton('note', i) : null,
-      h('button',{class:'restore',onclick:()=>restore(i)},'Restore')));
+      h('button',{class:'restore',onclick:()=>restore(i)},'Restore'))));
 }
 function infoRow(n){
   return h('div',{class:'info'},

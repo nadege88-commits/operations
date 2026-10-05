@@ -257,6 +257,7 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .cmt p a{color:var(--accent-soft);text-decoration:underline}
 .inrow{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;width:100%;text-align:left;position:relative;background:var(--surface);touch-action:pan-y}
 .swipe{position:relative;overflow:hidden}
+.swipe>.row-a{position:relative;background:var(--surface);touch-action:pan-y}
 .swipe-bg{position:absolute;inset:0;visibility:hidden;transition:opacity .15s;background:var(--now);color:#fff;display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:0 18px;font-weight:700;font-size:14px}
 .swipe.on .swipe-bg{visibility:visible}.swipe.gone .swipe-bg{opacity:0}
 .swipe-bg svg{width:18px;height:18px}
