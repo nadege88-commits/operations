@@ -87,6 +87,10 @@ h2{font-size:16px;font-weight:800;letter-spacing:-.01em;margin:0}
 .vhead .n{display:flex;gap:6px;position:relative;z-index:1;flex-wrap:wrap}
 .vhead .pw{background:rgba(255,255,255,.2);font-size:12px;padding:3px 10px}
 .vhead .pw.red{background:var(--now)}
+/* Areas with a logo show it centred in the header card instead of the name (logos are white, the card is coloured in both themes). */
+.vhead:has(.vh-logo) .n{justify-content:center}
+.vh-logo{display:flex;justify-content:center;margin:0}
+.vh-logo .vlogo{height:56px;width:auto;max-width:80%;object-fit:contain;display:block}
 
 /* add form */
 .add{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:10px}

@@ -426,7 +426,7 @@ function fillVenue(id){
     h('div',{class:'bar'},
       h('button',{class:'round','aria-label':'Back',onclick:goBack,html:I.back}),
       isOwner()? h('button',{class:'round','aria-label':'Rename area',onclick:()=>venueSheet(v),html:I.edit}) : h('span',{})),
-    h('h1',{},v.name),
+    LOGOS.has(v.id)? h('h1',{class:'vh-logo'}, h('img',{class:'vlogo',src:'logos/'+v.id+'.png',alt:v.name,decoding:'async'})) : h('h1',{},v.name),
     h('div',{class:'n'}, vn? h('span',{class:'pw red'},vn+' high') : null, h('span',{class:'pw'},vo.length+' open'), vj.length? h('span',{class:'pw'},vj.length+(vj.length>1?' jobs':' job')) : null));
   // Open / Done, like Maintenance: Done lists this area's finished tasks and jobs, newest first, with who finished them.
   const doneNotes = S.notes.filter(i=>i.done && !i.deleted && vids(i).includes(id));
